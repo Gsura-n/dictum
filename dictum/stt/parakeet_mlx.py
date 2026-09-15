@@ -1,11 +1,14 @@
-"""NVIDIA Parakeet TDT via the parakeet-mlx port (Apple Silicon)."""
+"""NVIDIA Parakeet TDT via the parakeet-mlx port (Apple Silicon).
+
+We bypass model.transcribe(path), which shells out to ffmpeg to decode a file.
+The audio is already in memory, so we compute the log-mel ourselves and call
+model.generate() directly. No temp file, no ffmpeg, one less process spawn.
+"""
 from __future__ import annotations
 
-import tempfile
 import time
-from pathlib import Path
 
-import soundfile as sf
+import numpy as np
 
 from ..types import AudioClip, Transcript
 
@@ -21,15 +24,24 @@ class ParakeetMLX:
         if self._model is None:
             from parakeet_mlx import from_pretrained  # lazy: optional dep
             self._model = from_pretrained(self.model_id)
+            # Warm up the graph so the first real utterance is not slow.
+            self._transcribe_samples(np.zeros(16000, dtype=np.float32), 16000)
+
+    def _transcribe_samples(self, samples: np.ndarray, sample_rate: int):
+        import mlx.core as mx
+        from parakeet_mlx.audio import get_logmel
+
+        cfg = self._model.preprocessor_config
+        assert sample_rate == cfg.sample_rate, f"parakeet expects {cfg.sample_rate} Hz audio"
+        audio = mx.array(samples.astype(np.float32))  # float32: get_logmel relies on it
+        mel = get_logmel(audio, cfg)
+        return self._model.generate(mel)[0]
 
     def transcribe(self, clip: AudioClip) -> Transcript:
         self.load()
-        # parakeet-mlx reads from a file path; write the clip to a temp wav.
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
-            sf.write(tmp.name, clip.samples, clip.sample_rate)
-            t0 = time.perf_counter()
-            result = self._model.transcribe(Path(tmp.name))
-            dt = time.perf_counter() - t0
+        t0 = time.perf_counter()
+        result = self._transcribe_samples(clip.samples, clip.sample_rate)
+        dt = time.perf_counter() - t0
         return Transcript(
             text=result.text.strip(), engine=self.name, latency_s=dt,
             audio_s=clip.duration_s,
