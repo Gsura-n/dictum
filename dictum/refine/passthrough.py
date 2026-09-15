@@ -5,9 +5,12 @@ from ..types import Refined, Transcript
 
 
 class Passthrough:
-    """Phase 1: no LLM. Returns the transcript unchanged."""
+    """No LLM. Returns the transcript unchanged. Useful for benchmarking STT alone."""
 
     name = "passthrough"
+
+    def warm_up(self, mode: Mode) -> float:
+        return 0.0
 
     def refine(self, transcript: Transcript, mode: Mode) -> Refined:
         return Refined(text=transcript.text, backend=self.name, mode=mode.name,

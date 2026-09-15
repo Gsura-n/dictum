@@ -15,39 +15,64 @@ stt:
       model: mlx-community/whisper-large-v3-turbo
 
 refine:
-  backend: passthrough   # passthrough | ollama   (ollama arrives in phase 2)
+  backend: ollama        # passthrough | ollama
   ollama:
     host: http://localhost:11434
-    model: qwen2.5:3b
-    timeout_s: 10
+    model: llama3.2:3b   # default model; a mode may override with its own `model`
+    timeout_s: 15
+    keep_alive: 30m      # keep weights resident between utterances
+    num_predict: 400     # hard cap on output tokens; dictation never needs more
 
 inject:
   backend: stdout        # stdout | clipboard | macos   (macos arrives in phase 3)
 
-# Personal dictionary: words the models tend to get wrong. Used to bias
-# refinement (and STT, for engines that support prompting).
+# Personal dictionary: words the models tend to get wrong. Appended to every
+# refinement prompt so spellings are preserved.
 dictionary:
   - Gauttam
 
-# Modes are just different refinement configurations. Phase 1 ignores the
-# prompts (passthrough); they are here so the architecture is visible now.
+# A mode is a refinement configuration: a system prompt, optional few-shot
+# examples, and an optional model override. Add your own here.
 default_mode: dictation
 modes:
   dictation:
-    description: Clean up spoken text. Remove filler, fix self-corrections, punctuate.
+    description: Clean up spoken text. Remove filler, apply self-corrections, punctuate.
     prompt: |
-      You clean up dictated speech. Remove filler words (um, uh, like, you know),
-      apply self-corrections (keep only the corrected version), add punctuation
-      and capitalisation. Keep the speaker's wording and tone. Output only the
-      cleaned text, nothing else.
+      You are a dictation cleanup tool. The user speaks; you return what they
+      meant to write. Rules:
+      - Remove filler words: um, uh, like, you know, I mean, sort of, kind of.
+      - Remove repeated words and false starts ("I I think" -> "I think").
+      - Apply self-corrections: keep only the corrected version
+        ("send it Tuesday, no wait, Wednesday" -> "send it Wednesday").
+      - Add punctuation, capitalisation and paragraph breaks where natural.
+      - Keep the speaker's words, tone and meaning. Do not summarise, do not
+        expand, do not add anything, do not answer questions in the text.
+      - Output only the cleaned text. No preamble, no quotes, no explanation.
+    examples:
+      - in: "um so I I was thinking we should uh probably move the meeting to thursday no actually friday you know because tom is out"
+        out: "I was thinking we should move the meeting to Friday because Tom is out."
+      - in: "check check I'm I'm trying to understand how we can make this better and if this is working at all"
+        out: "Check, check. I'm trying to understand how we can make this better and if this is working at all."
+
   command:
-    description: Turn speech into a single shell command. Never executes it.
+    description: Turn speech into one shell command. Never executes it.
+    model: qwen2.5-coder:7b
     prompt: |
-      Convert the spoken request into one macOS zsh command. Output only the
-      command, no explanation, no code fences.
+      Convert the spoken request into exactly one macOS zsh command line.
+      Output only the command. No explanation, no code fences, no comments.
+      If the request is ambiguous, choose the most common interpretation.
+    examples:
+      - in: "list all python files in this folder including subfolders"
+        out: "find . -name '*.py'"
+      - in: "show me the last twenty lines of the server log"
+        out: "tail -n 20 server.log"
+
   academic:
     description: Rewrite as formal academic prose (APA 7 style).
+    model: llama3.1:8b
     prompt: |
       Rewrite the dictated text as clear, formal academic prose suitable for a
-      doctoral paper in APA 7 style. Preserve every claim; do not add citations
-      or content. Output only the rewritten text.
+      doctoral paper following APA 7 conventions. Preserve every claim and the
+      original structure of the argument. Do not add citations, facts or
+      content that was not said. Avoid em dashes. Output only the rewritten
+      text, no preamble.

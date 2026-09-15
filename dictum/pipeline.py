@@ -9,7 +9,7 @@ from .config import Config
 from .inject import Injector, create_injector
 from .refine import Refiner, create_refiner
 from .stt import STTEngine, create_engine
-from .types import AudioClip, Refined
+from .types import AudioClip, Refined, Transcript
 
 
 @dataclass
@@ -19,31 +19,53 @@ class Timing:
     refine_s: float
     total_s: float
 
+    def __str__(self) -> str:
+        rtf = self.stt_s / self.audio_s if self.audio_s else 0
+        return (f"audio {self.audio_s:.1f}s | stt {self.stt_s:.2f}s (rtf {rtf:.2f}) "
+                f"| refine {self.refine_s:.2f}s | total {self.total_s:.2f}s")
+
 
 class Pipeline:
     def __init__(self, capture: AudioCapture, stt: STTEngine, refiner: Refiner, injector: Injector, cfg: Config):
         self.capture, self.stt, self.refiner, self.injector, self.cfg = capture, stt, refiner, injector, cfg
 
     @classmethod
-    def from_config(cls, cfg: Config, engine: str | None = None) -> "Pipeline":
+    def from_config(cls, cfg: Config, engine: str | None = None, refine: str | None = None,
+                    inject: str | None = None, device: int | None = None) -> "Pipeline":
         a = cfg.audio
-        capture = SoundDeviceCapture(a.get("sample_rate", 16000), a.get("channels", 1), a.get("device"))
+        dev = device if device is not None else a.get("device")
+        capture = SoundDeviceCapture(a.get("sample_rate", 16000), a.get("channels", 1), dev)
         name, ecfg = cfg.stt_engine_config(engine)
         stt = create_engine(name, **ecfg)
-        refiner = create_refiner(cfg.refine, cfg.dictionary)
-        injector = create_injector(cfg.inject)
+        refiner = create_refiner(cfg.refine, cfg.dictionary, backend=refine)
+        icfg = dict(cfg.inject)
+        if inject:
+            icfg["backend"] = inject
+        injector = create_injector(icfg)
         return cls(capture, stt, refiner, injector, cfg)
 
-    def warm_up(self) -> float:
+    def warm_up(self, mode_name: str | None = None) -> dict[str, float]:
+        """Load STT weights and the refiner model for the given mode."""
         t0 = time.perf_counter()
         self.stt.load()
-        return time.perf_counter() - t0
+        stt_s = time.perf_counter() - t0
+        refine_s = self.refiner.warm_up(self.cfg.mode(mode_name))
+        return {"stt": stt_s, "refine": refine_s}
 
     def process(self, clip: AudioClip, mode_name: str | None = None) -> tuple[Refined, Timing]:
         """Everything after the mic: STT -> refine -> inject."""
         t0 = time.perf_counter()
         transcript = self.stt.transcribe(clip)
-        refined = self.refiner.refine(transcript, self.cfg.mode(mode_name))
+        if len(transcript.text.split()) < 2:
+            # Nothing (or one word) to clean up. Never hand an LLM an empty
+            # prompt: it will happily invent a sentence.
+            refined = Refined(text=transcript.text, backend="skipped", mode=mode_name or "",
+                              latency_s=0.0, source=transcript)
+        else:
+            refined = self.refine_text(transcript, mode_name)
         self.injector.inject(refined.text)
         total = time.perf_counter() - t0
         return refined, Timing(clip.duration_s, transcript.latency_s, refined.latency_s, total)
+
+    def refine_text(self, transcript: Transcript, mode_name: str | None = None) -> Refined:
+        return self.refiner.refine(transcript, self.cfg.mode(mode_name))

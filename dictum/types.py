@@ -15,6 +15,19 @@ class AudioClip:
     def duration_s(self) -> float:
         return len(self.samples) / self.sample_rate
 
+    @property
+    def rms(self) -> float:
+        return float(np.sqrt(np.mean(self.samples ** 2))) if len(self.samples) else 0.0
+
+    @property
+    def peak(self) -> float:
+        return float(np.max(np.abs(self.samples))) if len(self.samples) else 0.0
+
+    @property
+    def is_silent(self) -> bool:
+        """Below roughly -60 dBFS: nothing was captured, or the wrong device is selected."""
+        return self.rms < 1e-3
+
 
 @dataclass
 class Transcript:

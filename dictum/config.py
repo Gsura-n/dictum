@@ -27,6 +27,8 @@ class Mode:
     name: str
     description: str = ""
     prompt: str = ""
+    model: str | None = None                       # per-mode LLM override
+    examples: list[dict[str, str]] = field(default_factory=list)  # [{in, out}]
 
 
 @dataclass
@@ -66,9 +68,14 @@ class Config:
     def dictionary(self) -> list[str]:
         return list(self.raw.get("dictionary", []) or [])
 
+    @property
+    def mode_names(self) -> list[str]:
+        return list(self.raw.get("modes", {}))
+
     def mode(self, name: str | None = None) -> Mode:
         name = name or self.raw.get("default_mode", "dictation")
         m = self.raw.get("modes", {}).get(name)
         if m is None:
-            raise KeyError(f"Unknown mode '{name}'. Known: {list(self.raw.get('modes', {}))}")
-        return Mode(name=name, description=m.get("description", ""), prompt=m.get("prompt", ""))
+            raise KeyError(f"Unknown mode '{name}'. Known: {self.mode_names}")
+        return Mode(name=name, description=m.get("description", ""), prompt=m.get("prompt", ""),
+                    model=m.get("model"), examples=list(m.get("examples") or []))

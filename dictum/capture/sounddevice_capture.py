@@ -17,20 +17,34 @@ def list_input_devices() -> list[dict]:
     return out
 
 
+def resample(samples: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
+    if src_sr == dst_sr:
+        return samples
+    import soxr  # high quality, fast; a hard dependency because mic rates vary
+    return soxr.resample(samples, src_sr, dst_sr).astype(np.float32)
+
+
 class SoundDeviceCapture:
-    """Push-to-talk style capture. Frames are appended from a callback thread."""
+    """Push-to-talk style capture.
+
+    Opens the device at its own native sample rate (Bluetooth headsets in
+    particular return silence or fail when asked for a rate they don't run at)
+    and resamples to the pipeline rate on stop().
+    """
 
     def __init__(self, sample_rate: int = 16000, channels: int = 1, device=None):
-        self.sample_rate = sample_rate
+        self.sample_rate = sample_rate          # what the pipeline wants
         self.channels = channels
         self.device = device
+        info = sd.query_devices(device if device is not None else sd.default.device[0])
+        self.device_name = info["name"]
+        self.device_rate = int(info["default_samplerate"])   # what the mic runs at
         self._frames: list[np.ndarray] = []
         self._lock = threading.Lock()
         self._stream: sd.InputStream | None = None
 
     def _callback(self, indata, frames, time_info, status):
         if status:
-            # Overflows etc. are worth knowing about but not fatal.
             print(f"[capture] {status}", flush=True)
         with self._lock:
             self._frames.append(indata[:, 0].copy())
@@ -38,7 +52,7 @@ class SoundDeviceCapture:
     def start(self) -> None:
         self._frames = []
         self._stream = sd.InputStream(
-            samplerate=self.sample_rate, channels=self.channels, dtype="float32",
+            samplerate=self.device_rate, channels=self.channels, dtype="float32",
             device=self.device, callback=self._callback,
         )
         self._stream.start()
@@ -49,5 +63,6 @@ class SoundDeviceCapture:
         self._stream.close()
         self._stream = None
         with self._lock:
-            samples = np.concatenate(self._frames) if self._frames else np.zeros(0, np.float32)
-        return AudioClip(samples=samples.astype(np.float32), sample_rate=self.sample_rate)
+            raw = np.concatenate(self._frames) if self._frames else np.zeros(0, np.float32)
+        samples = resample(raw.astype(np.float32), self.device_rate, self.sample_rate)
+        return AudioClip(samples=samples, sample_rate=self.sample_rate)

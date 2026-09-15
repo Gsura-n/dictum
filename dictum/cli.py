@@ -1,4 +1,4 @@
-"""Command-line entry points: dictum listen | bench | devices | modes."""
+"""Command-line entry points: dictum listen | refine | bench | devices | modes."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,6 +11,11 @@ from .config import Config
 
 app = typer.Typer(add_completion=False, help="Local-first voice dictation.")
 console = Console()
+
+ENGINE_OPT = typer.Option(None, help="STT engine override: parakeet | whisper")
+MODE_OPT = typer.Option(None, help="Refinement mode: dictation | command | academic")
+REFINE_OPT = typer.Option(None, help="Refine backend override: passthrough | ollama")
+INJECT_OPT = typer.Option(None, help="Inject backend override: stdout | clipboard")
 
 
 @app.command()
@@ -27,27 +32,31 @@ def devices():
 def modes():
     """List refinement modes from config."""
     cfg = Config.load()
-    t = Table("mode", "description")
-    for name, m in cfg.raw.get("modes", {}).items():
-        t.add_row(name, m.get("description", ""))
+    default_model = cfg.refine.get("ollama", {}).get("model", "")
+    t = Table("mode", "model", "examples", "description")
+    for name in cfg.mode_names:
+        m = cfg.mode(name)
+        t.add_row(name, m.model or f"{default_model} (default)", str(len(m.examples)), m.description)
     console.print(t)
 
 
 @app.command()
 def listen(
-    engine: str = typer.Option(None, help="STT engine override: parakeet | whisper"),
-    mode: str = typer.Option(None, help="Refinement mode: dictation | command | academic"),
+    engine: str = ENGINE_OPT, mode: str = MODE_OPT, refine: str = REFINE_OPT, inject: str = INJECT_OPT,
+    device: int = typer.Option(None, help="Input device index (see `dictum devices`)"),
     save: Path = typer.Option(None, help="Also save each clip as WAV into this directory (for benchmarks)"),
 ):
     """Press Enter to start recording, Enter again to stop. Ctrl+C to quit."""
     from .pipeline import Pipeline
 
     cfg = Config.load()
-    pipe = Pipeline.from_config(cfg, engine)
-    with console.status(f"Loading {pipe.stt.name} model (first run downloads weights)..."):
-        load_s = pipe.warm_up()
-    console.print(f"[green]ready[/] ({pipe.stt.name}, loaded in {load_s:.1f}s). "
-                  f"refine={pipe.refiner.name} inject={pipe.injector.name} mode={cfg.mode(mode).name}")
+    pipe = Pipeline.from_config(cfg, engine, refine, inject, device)
+    console.print(f"[dim]mic: {pipe.capture.device_name} @ {pipe.capture.device_rate} Hz[/]")
+    with console.status("Loading models (first run downloads STT weights)..."):
+        load = pipe.warm_up(mode)
+    console.print(f"[green]ready[/]  stt={pipe.stt.name} ({load['stt']:.1f}s)  "
+                  f"refine={pipe.refiner.name} ({load['refine']:.1f}s)  "
+                  f"inject={pipe.injector.name}  mode={cfg.mode(mode).name}")
     if save:
         save.mkdir(parents=True, exist_ok=True)
 
@@ -61,16 +70,45 @@ def listen(
             if clip.duration_s < 0.3:
                 console.print("[yellow]too short, skipped[/]")
                 continue
+            if clip.is_silent:
+                console.print(f"[red]silent clip[/] (rms {clip.rms:.5f}, peak {clip.peak:.3f}). "
+                              "Check mic permission for Terminal and the device shown above; "
+                              "try --device N from `dictum devices`.")
+                continue
             if save:
                 import soundfile as sf
                 n += 1
                 sf.write(save / f"clip_{n:03d}.wav", clip.samples, clip.sample_rate)
             with console.status("transcribing..."):
                 refined, t = pipe.process(clip, mode)
-            console.print(f"[dim]audio {t.audio_s:.1f}s | stt {t.stt_s:.2f}s (rtf {t.stt_s / t.audio_s:.2f}) "
-                          f"| refine {t.refine_s:.2f}s | total {t.total_s:.2f}s[/]")
+            if refined.text != refined.source.text:
+                console.print(f"[dim]raw: {refined.source.text}[/]")
+            console.print(f"[dim]{t} | level rms {clip.rms:.3f} peak {clip.peak:.2f}[/]")
     except (KeyboardInterrupt, EOFError):
         console.print("\nbye")
+
+
+@app.command()
+def refine(
+    text: str = typer.Argument(..., help="Raw text to refine, as if it came from the STT stage"),
+    mode: str = MODE_OPT,
+    all_modes: bool = typer.Option(False, "--all", help="Run every mode and compare"),
+):
+    """Refine typed text without the microphone. Handy for iterating on prompts."""
+    from .refine import create_refiner
+    from .types import Transcript
+
+    cfg = Config.load()
+    refiner = create_refiner(cfg.refine, cfg.dictionary)
+    tr = Transcript(text=text, engine="typed", latency_s=0.0, audio_s=0.0)
+    names = cfg.mode_names if all_modes else [cfg.mode(mode).name]
+    for name in names:
+        m = cfg.mode(name)
+        warm = refiner.warm_up(m)
+        r = refiner.refine(tr, m)
+        console.rule(f"{name}  [dim]{getattr(refiner, 'model_for', lambda _: '')(m)}  "
+                     f"warm {warm:.1f}s  refine {r.latency_s:.2f}s[/]")
+        console.print(r.text)
 
 
 @app.command()

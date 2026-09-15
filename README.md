@@ -6,13 +6,15 @@ Think of it as an open source take on tools like Wispr Flow, with two difference
 
 ## Status
 
-Phase 1 of 4. What works today:
+Phase 2 of 4. What works today:
 
 - Push-to-talk recording from the terminal
 - Speech to text with a pluggable engine layer: NVIDIA Parakeet TDT (default) or Whisper, both via MLX
-- A benchmark command that compares engines on latency and word error rate on your own voice
+- LLM cleanup through Ollama, with modes: dictation (filler removal, self-corrections, punctuation), command (speech to one shell command, never executed), academic (APA style prose). Each mode has its own prompt, few-shot examples and optionally its own model
+- A personal dictionary that keeps your names and jargon spelled right
+- A benchmark command that compares STT engines on latency and word error rate on your own voice
 
-Coming next: LLM cleanup through Ollama (phase 2), typing into the focused app with a global hotkey (phase 3), then modes, personal dictionary and an overlay (phase 4).
+Coming next: typing into the focused app with a global hotkey (phase 3), then app-aware mode selection, a self-improving dictionary and an overlay (phase 4).
 
 ## Quick start (Apple Silicon)
 
@@ -24,10 +26,15 @@ dictum devices     # confirm your microphone shows up
 dictum listen      # Enter to start, Enter to stop; first run downloads the model
 ```
 
-Try the other engine:
+Refinement needs [Ollama](https://ollama.com) running with a model pulled (default `llama3.2:3b`; command mode uses `qwen2.5-coder:7b`, academic uses `llama3.1:8b`, all configurable):
 
 ```bash
-dictum listen --engine whisper
+ollama pull llama3.2:3b
+dictum listen                       # dictation mode
+dictum listen --mode command        # speech -> shell command, printed not run
+dictum refine "um so I I think we should uh ship it friday no monday" --all   # iterate on prompts without the mic
+dictum listen --refine passthrough  # raw STT only
+dictum listen --engine whisper      # the other STT engine
 ```
 
 Record a few clips and compare engines on them:

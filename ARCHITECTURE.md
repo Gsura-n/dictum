@@ -30,7 +30,13 @@ Interfaces are `typing.Protocol`, not abstract base classes. An adapter is any c
 
 **Parakeet TDT as default, Whisper as the known quantity.** Parakeet has a lower real-time factor at equal or better English accuracy. Whisper is multilingual and familiar. Both run through MLX so they use the Apple Silicon GPU without a CUDA dependency.
 
-**Modes are configuration, not code.** A mode is a name, a description and a system prompt in YAML. Dictation, command and academic are just three entries. Users add their own without touching Python. In phase 4 a mode can also be selected automatically by the focused application.
+**Modes are configuration, not code.** A mode is a name, a system prompt, a few worked examples and optionally a model override, all in YAML. Dictation, command and academic are just three entries. Users add their own without touching Python. In phase 4 a mode can also be selected automatically by the focused application.
+
+**Few-shot examples over longer rule lists.** The refiner runs on a 3B model to stay inside the latency budget, and small models follow two worked examples far more reliably than ten bullet points. Examples live next to the prompt in the mode definition so they can be tuned with `dictum refine` without touching code.
+
+**Per-mode model selection.** Dictation wants speed (llama3.2:3b). Command mode wants a code model (qwen2.5-coder:7b). Academic mode can afford a larger general model because nobody dictates a paragraph of a paper and expects it in half a second. Routing by mode keeps the common path fast without capping quality on the rare paths.
+
+**Defensive output cleanup.** Small models occasionally wrap output in quotes or code fences, and reasoning models emit think blocks. The refiner strips all three rather than trusting the prompt.
 
 **Refinement is a stage, not a feature of STT.** Keeping it separate means it can be turned off (passthrough), swapped (Ollama today, MLX-native later), and measured on its own. The latency budget is the whole point: if STT plus refine exceeds about 1.5 seconds, people stop using push-to-talk tools.
 
@@ -51,7 +57,7 @@ Interfaces are `typing.Protocol`, not abstract base classes. An adapter is any c
 
 ## Roadmap
 
-- Phase 1: capture, STT, benchmark, terminal output (this)
-- Phase 2: Ollama refiner, mode prompts live, dictionary biasing
+- Phase 1: capture, STT, benchmark, terminal output (done)
+- Phase 2: Ollama refiner, modes with examples and per-mode models, dictionary (done)
 - Phase 3: global hotkey (hold to talk), macOS injector, menu bar presence
 - Phase 4: app-aware mode selection, self-improving dictionary from user corrections, streaming partials, small overlay

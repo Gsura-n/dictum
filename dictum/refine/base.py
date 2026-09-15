@@ -11,4 +11,8 @@ class Refiner(Protocol):
 
     name: str
 
+    def warm_up(self, mode: Mode) -> float:
+        """Prepare the model for this mode. Returns seconds taken."""
+        ...
+
     def refine(self, transcript: Transcript, mode: Mode) -> Refined: ...
