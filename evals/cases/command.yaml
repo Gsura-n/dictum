@@ -31,7 +31,7 @@
   difficulty: medium
   input: "show me the last five git commits one line each"
   reference: "git log --oneline -5"
-  regex: ['^git log\b', '--oneline', '(-n\s*5|-5\b|--max-count=5)']
+  regex: ['^git log\b', "(--oneline|--pretty=|--format=)", '(-n\s*5|-5\b|--max-count=5)']
 
 - id: kill-port
   difficulty: hard

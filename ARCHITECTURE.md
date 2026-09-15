@@ -52,6 +52,12 @@ Interfaces are `typing.Protocol`, not abstract base classes. An adapter is any c
 
 **Capture at the device's native rate.** Bluetooth headsets such as AirPods run their mic at 24 kHz and can return pure silence when opened at 16 kHz. Capture opens the device at whatever it reports and resamples with soxr.
 
+**Measure before tuning.** `dictum eval` runs the refine stage alone against cases scored by deterministic checks (required and forbidden phrases, regexes, length ratios) rather than exact matches, reported by difficulty with latency percentiles. Guard fallbacks are counted separately so a guard rescuing a bad output cannot hide in the pass rate. Few-shot examples are kept disjoint from eval cases.
+
+**The model proposes, code disposes.** Anything that must be right every time lives in code: dictionary respellings, the output length guard that replaces a hallucinated poem with the user's own words, single-line enforcement for commands. The LLM handles only what genuinely needs judgment.
+
+**Mode is resolved at key press, from the app in front.** The frontmost app at press time is where the text will land, so that is when `auto` is resolved. A second key always forces plain dictation, because a terminal is also where you write prompts and commit messages.
+
 **Command mode never executes.** It produces a proposed command. Running it is a deliberate, separate action by the user.
 
 ## Latency budget (target on M4, 16 GB)
@@ -70,4 +76,4 @@ Interfaces are `typing.Protocol`, not abstract base classes. An adapter is any c
 - Phase 1: capture, STT, benchmark, terminal output (done)
 - Phase 2: Ollama refiner, modes with examples and per-mode models, dictionary (done)
 - Phase 3: global hold-to-talk hotkey, paste into focused app with clipboard restore, permission checks (done)
-- Phase 4: app-aware mode selection, self-improving dictionary from user corrections, streaming partials, small overlay
+- Phase 4: app-aware mode selection (started: frontmost app picks the mode), self-improving dictionary from user corrections, streaming partials, small overlay

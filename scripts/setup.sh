@@ -22,6 +22,8 @@ else
   pip install -e '.[parakeet,whisper,refine,mac,dev]'
 fi
 
+python scripts/fetch_datasets.py || echo "(eval datasets not fetched; run scripts/fetch_datasets.py later)"
+
 echo
 echo "Setup complete. Next:"
 echo "  source .venv/bin/activate"

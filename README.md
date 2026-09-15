@@ -48,6 +48,31 @@ dictum listen --save benchmarks/samples
 dictum bench
 ```
 
+## How good is it?
+
+Evals run the refine stage alone (STT is measured separately by `dictum bench`) and report pass rate with a 95% confidence interval.
+
+Headline numbers come from human-authored public datasets, split into a dev set that prompts are tuned against and a test set that is only run to report. See [evals/DATASETS.md](evals/DATASETS.md).
+
+```bash
+python scripts/fetch_datasets.py
+dictum eval --suite disflqa --split test     # 500 human-written disfluent questions
+dictum eval --suite nl2bash --split test     # 300 programmer-written command descriptions
+dictum eval --suite targeted                 # 30 hand-written regression cases
+```
+
+Results on the human-authored test splits: *pending first run.*
+
+Early results on the 30 hand-written targeted cases (written with an AI assistant, used for regression, not for headline claims):
+
+| mode | model | before tuning | after | p50 refine |
+|---|---|---|---|---|
+| dictation | llama3.1:8b | 59% | 94% | 1.07 s |
+| dictation | llama3.2:3b | 53% | 76% | 0.40 s |
+| command | qwen2.5-coder:7b | 92% | 100% | 0.57 s |
+
+What moved those numbers was mostly not the model: delimiting the transcript so it is treated as data (this fixed prompt injection), deterministic output guards, fixing dictionary words in code before the LLM runs, and few-shot examples kept separate from eval cases.
+
 ## Configuration
 
 `config/default.yaml` holds everything: audio device, engine and model names, refinement backend, injection backend, modes and your personal dictionary. Copy it to `config/local.yaml` for overrides; that file is git-ignored.

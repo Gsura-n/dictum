@@ -50,3 +50,4 @@ class Refined:
     mode: str
     latency_s: float
     source: Transcript
+    notes: list[str] = field(default_factory=list)   # guard trips, dictionary fixes

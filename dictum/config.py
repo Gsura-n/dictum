@@ -29,6 +29,7 @@ class Mode:
     prompt: str = ""
     model: str | None = None                       # per-mode LLM override
     examples: list[dict[str, str]] = field(default_factory=list)  # [{in, out}]
+    guard: dict = field(default_factory=dict)      # see refine/guards.py
 
 
 @dataclass
@@ -65,7 +66,8 @@ class Config:
         return self.raw.get("inject", {})
 
     @property
-    def dictionary(self) -> list[str]:
+    def dictionary(self) -> list:
+        """Raw entries: strings or {word, sounds_like}. Parse with dictum.dictionary.parse."""
         return list(self.raw.get("dictionary", []) or [])
 
     @property
@@ -78,4 +80,5 @@ class Config:
         if m is None:
             raise KeyError(f"Unknown mode '{name}'. Known: {self.mode_names}")
         return Mode(name=name, description=m.get("description", ""), prompt=m.get("prompt", ""),
-                    model=m.get("model"), examples=list(m.get("examples") or []))
+                    model=m.get("model"), examples=list(m.get("examples") or []),
+                    guard=dict(m.get("guard") or {}))

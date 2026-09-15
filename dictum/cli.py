@@ -62,6 +62,23 @@ def run(engine: str = ENGINE_OPT):
 
 
 @app.command()
+def apps(delay: float = typer.Option(3.0, help="Seconds to wait so you can switch to the target app")):
+    """Show the frontmost app's bundle id and which mode `auto` would pick."""
+    import time
+    from .context import frontmost_app, mode_for_app
+
+    cfg = Config.load()
+    console.print(f"switch to the app you want to check... ({delay:.0f}s)")
+    time.sleep(delay)
+    app = frontmost_app()
+    if app is None:
+        console.print("[red]could not read the frontmost app[/]")
+        raise typer.Exit(1)
+    mode = mode_for_app(app, cfg.raw.get("apps", {}), cfg.mode_names)
+    console.print(f"app: [bold]{app.name}[/]  bundle id: [bold]{app.bundle_id}[/]  → auto mode: [green]{mode}[/]")
+
+
+@app.command()
 def check():
     """Check permissions, microphone and Ollama models."""
     from . import permissions
@@ -178,35 +195,54 @@ def refine(
 
 @app.command("eval")
 def eval_(
-    mode: str = typer.Option(None, help="Only these modes, comma-separated (default: all with cases)"),
+    suite: str = typer.Option("targeted", help="targeted | disflqa | nl2bash (see evals/DATASETS.md)"),
+    split: str = typer.Option("dev", help="dev (tune against) | test (report only; do not read failures while tuning)"),
+    mode: str = typer.Option(None, help="Only these modes, comma-separated"),
     models: str = typer.Option(None, help="Compare these Ollama models, comma-separated (default: mode's configured model)"),
+    limit: int = typer.Option(None, help="Only the first N cases (quick smoke run)"),
     repeat: int = typer.Option(1, help="Runs per case (use 3 to see flakiness)"),
-    failures: bool = typer.Option(True, "--failures/--no-failures", help="Print each failing case"),
+    failures: bool = typer.Option(None, "--failures/--no-failures", help="Print failing cases (default: on for dev, off for test)"),
     markdown: bool = typer.Option(False, help="Also print a markdown table for the README"),
 ):
-    """Score the refine stage against evals/cases: pass rate by difficulty and latency."""
+    """Score the refine stage: pass rate with 95% CI, latency, and suite-specific metrics."""
     from . import evals
 
+    if split not in ("dev", "test"):
+        raise typer.BadParameter("split must be dev or test")
     cfg = Config.load()
     results = evals.run_eval(cfg, mode.split(",") if mode else None,
-                             [m.strip() for m in models.split(",")] if models else None, repeat, console)
+                             [m.strip() for m in models.split(",")] if models else None, repeat, console,
+                             suite=suite, split=split, limit=limit)
     summary = evals.summarize(results)
     path = evals.save(results)
 
-    if failures:
+    show = failures if failures is not None else (split == "dev")
+    if show:
         for r in results["rows"]:
             if not r["passed"]:
                 console.print(f"[red]✗[/] [bold]{r['mode']}/{r['case']}[/] [dim]({r['difficulty']}, {r['model']})[/]")
                 console.print(f"   [dim]in: [/] {r['input']}")
+                console.print(f"   [dim]ref:[/] {r['reference']}")
                 console.print(f"   [dim]out:[/] {r['output']}")
                 console.print(f"   [dim]why:[/] [yellow]{'; '.join(r['failures'])}[/]")
+                if r.get("notes"):
+                    console.print(f"   [dim]notes: {'; '.join(r['notes'])}[/]")
+    elif split == "test":
+        console.print("[dim]test split: failures hidden so they cannot leak into tuning (--failures to override)[/]")
 
     def pct(x):
         return "n/a" if x is None else f"{x:.0%}"
-    t = Table("mode", "model", "n", "pass", "easy", "medium", "hard", "p50 s", "p95 s", "sim", title="Refine eval")
+    t = Table("mode", "model", "n", "pass", "95% CI", "hard", "guard", "extra", "p50 s", "p95 s",
+              title=f"Refine eval: {suite} / {split if suite != 'targeted' else 'all'}")
     for s in summary:
-        t.add_row(s["mode"], s["model"], str(s["n"]), f"[bold]{pct(s['pass'])}[/]", pct(s["easy"]),
-                  pct(s["medium"]), pct(s["hard"]), f"{s['p50_s']:.2f}", f"{s['p95_s']:.2f}", f"{s['similarity']:.2f}")
+        extra = []
+        if "mean_wer" in s:
+            extra.append(f"wer {s['mean_wer']:.3f}")
+        if "flag_f1" in s:
+            extra.append(f"flag F1 {s['flag_f1']:.2f}")
+        t.add_row(s["mode"], s["model"], str(s["n"]), f"[bold]{pct(s['pass'])}[/]",
+                  f"{s['ci_low']:.0%} to {s['ci_high']:.0%}", pct(s["hard"]), str(s["guard_trips"]),
+                  ", ".join(extra), f"{s['p50_s']:.2f}", f"{s['p95_s']:.2f}")
     console.print(t)
     if markdown:
         console.print(evals.markdown_table(summary))

@@ -18,6 +18,7 @@ import time
 from rich.console import Console
 
 from .config import Config
+from .context import frontmost_app, mode_for_app
 from .hotkey.keymap import resolve_bindings
 from .pipeline import Pipeline
 
@@ -62,14 +63,19 @@ class DictumApp:
         while True:
             kind, arg = self._events.get()
             if kind == "down" and mode is None:
+                # Resolve the mode at press time: the app in front now is the
+                # one the text will be pasted into.
+                app = frontmost_app()
+                resolved = mode_for_app(app, self.cfg.raw.get("apps", {}), self.cfg.mode_names) if arg == "auto" else arg
                 try:
                     cap.start()
                 except Exception as e:
                     self.console.print(f"[red]mic error:[/] {e}")
                     continue
-                mode, t_start = arg, time.perf_counter()
+                mode, t_start = resolved, time.perf_counter()
                 self._sound("start")
-                self.console.print(f"[cyan]● recording[/] [dim]({mode})[/]")
+                where = f" in {app.name}" if app else ""
+                self.console.print(f"[cyan]● recording[/] [dim]({mode}{where})[/]")
             elif kind in ("up", "cancel") and mode is not None:
                 clip = cap.stop()
                 held = time.perf_counter() - t_start
@@ -89,7 +95,11 @@ class DictumApp:
     # -- processor thread ----------------------------------------------------
     def _processor(self) -> None:
         try:
-            modes = sorted({b.mode for b in self.bindings})
+            modes = {b.mode for b in self.bindings if b.mode != "auto"}
+            if any(b.mode == "auto" for b in self.bindings):
+                apps = self.cfg.raw.get("apps", {})
+                modes |= {apps.get("default", "dictation")} | {r["mode"] for r in apps.get("rules", [])}
+            modes = sorted(modes)
             load = self.pipe.warm_up(modes=modes)
             self.console.print(f"[dim]models loaded: stt {load['stt']:.1f}s, refine {load['refine']:.1f}s[/]")
         except BaseException as e:
@@ -104,6 +114,8 @@ class DictumApp:
             except Exception as e:
                 self.console.print(f"[red]error:[/] {type(e).__name__}: {e}")
                 continue
+            for note in refined.notes:
+                self.console.print(f"[yellow]  {note}[/]")
             if refined.backend.startswith("failed"):
                 self.console.print(f"[yellow]refine {refined.backend}; pasted raw transcript[/]")
             # Newline first: if you dictated into this terminal, the paste sits on the current line.

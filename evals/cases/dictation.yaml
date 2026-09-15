@@ -6,7 +6,7 @@
   difficulty: easy
   input: "um so I think we should uh start the meeting at ten"
   reference: "I think we should start the meeting at ten."
-  include: ["start the meeting at ten"]
+  regex: ['start the meeting at (ten|10)']
   exclude: ["um", "uh"]
 
 - id: repeated-words
@@ -61,7 +61,8 @@
   difficulty: hard
   input: "the budget for the project is fifty thousand dollars scratch that we haven't finalized the budget yet but it should be ready by Friday"
   reference: "We haven't finalized the budget yet, but it should be ready by Friday."
-  include: ["haven't finalized the budget", "Friday"]
+  regex: ["(haven't|have not|hasn't been|has not been) finalized"]
+  include: ["budget", "Friday"]
   exclude: ["scratch that"]
   not_regex: ['fifty thousand|50,?000']
 
@@ -100,14 +101,25 @@
 
 - id: dictionary-name
   tags: [dictionary]
+  dictionary:
+    - word: Gauttam
+      sounds_like: [gautam, gowtham]
+    - word: Ollama
+      sounds_like: [olama, o llama]
+    - Parakeet
   difficulty: hard
   input: "hi this is gautam following up on the parakeet and olama integration we talked about last week"
   reference: "Hi, this is Gauttam, following up on the Parakeet and Ollama integration we talked about last week."
-  include_exact: ["Gauttam"]
+  include_exact: ["Gauttam", "Ollama"]
   include: ["following up", "integration we talked about last week"]
 
 - id: tech-terms
   tags: [dictionary]
+  dictionary:
+    - word: useEffect
+      sounds_like: [use effect]
+    - word: StrictMode
+      sounds_like: [strict mode]
   difficulty: hard
   input: "so the use effect hook is firing twice because react strict mode double invokes it in development"
   reference: "So the useEffect hook is firing twice because React Strict Mode double-invokes it in development."
@@ -115,7 +127,10 @@
   include: ["firing twice", "in development"]
 
 - id: spoken-email-url
-  tags: [formatting]
+  tags: [formatting, dictionary-leak]
+  dictionary:
+    - word: Gauttam
+      sounds_like: [gautam]
   difficulty: hard
   input: "you can reach me at g suraneni at gmail dot com or look at the repo at github dot com slash gsura dash n slash dictum"
   reference: "You can reach me at gsuraneni@gmail.com or look at the repo at github.com/gsura-n/dictum."

@@ -14,7 +14,7 @@ def test_build_messages_includes_examples_and_dictionary():
     msgs = build_messages(mode, "hello", ["Gauttam"])
     assert msgs[0]["role"] == "system" and "Gauttam" in msgs[0]["content"]
     assert [m["role"] for m in msgs] == ["system", "user", "assistant", "user"]
-    assert msgs[-1]["content"] == "hello"
+    assert msgs[-1]["content"] == "<transcript>hello</transcript>"
 
 
 def test_modes_have_examples_and_model_overrides():

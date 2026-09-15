@@ -39,7 +39,7 @@ def resolve_bindings(hold: dict[str, str], known_modes: list[str]) -> list[Bindi
     out = []
     for key, mode in (hold or {}).items():
         key = key.lower()
-        if mode not in known_modes:
+        if mode != "auto" and mode not in known_modes:
             raise ValueError(f"hotkey '{key}' is bound to unknown mode '{mode}'. Known: {known_modes}")
         if key in MODIFIER_KEYS:
             code, mask = MODIFIER_KEYS[key]

@@ -8,7 +8,7 @@ def test_default_hotkeys_resolve():
     cfg = Config.load()
     b = resolve_bindings(cfg.raw["hotkeys"]["hold"], cfg.mode_names)
     keys = {x.key: x for x in b}
-    assert keys["right_option"].keycode == 61 and keys["right_option"].mode == "dictation"
+    assert keys["right_option"].keycode == 61 and keys["right_option"].mode == "auto"
     assert keys["right_option"].mask == 0x40
 
 
