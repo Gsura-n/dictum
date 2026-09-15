@@ -14,16 +14,17 @@ $PY -c 'import sys; assert sys.version_info >= (3, 11), "Python 3.11+ required"'
 if command -v uv >/dev/null 2>&1; then
   uv venv .venv --python "$PY" 2>/dev/null || true
   source .venv/bin/activate
-  uv pip install -e '.[parakeet,whisper,refine,dev]'
+  uv pip install -e '.[parakeet,whisper,refine,mac,dev]'
 else
   [[ -d .venv ]] || $PY -m venv .venv
   source .venv/bin/activate
   pip install --upgrade pip
-  pip install -e '.[parakeet,whisper,refine,dev]'
+  pip install -e '.[parakeet,whisper,refine,mac,dev]'
 fi
 
 echo
 echo "Setup complete. Next:"
 echo "  source .venv/bin/activate"
 echo "  dictum devices        # confirm your mic is visible"
-echo "  dictum listen         # first run downloads the Parakeet model (~1.2 GB)"
+echo "  dictum check          # permissions, mic, Ollama models"
+echo "  dictum run            # hold Right Option anywhere and talk"

@@ -57,8 +57,15 @@ class OllamaRefiner:
 
     def warm_up(self, mode: Mode) -> float:
         """Load the mode's model into memory. Returns seconds taken."""
+        # A real (tiny) chat with the mode's full prompt, not just a model load:
+        # this also evaluates and caches the system prompt + examples prefix,
+        # which is most of the cost of the first real request.
         t0 = time.perf_counter()
-        r = self._client.post("/api/generate", json={"model": self.model_for(mode), "keep_alive": self.keep_alive})
+        r = self._client.post("/api/chat", json={
+            "model": self.model_for(mode), "stream": False, "keep_alive": self.keep_alive,
+            "options": {"temperature": 0.1, "num_predict": 1},
+            "messages": build_messages(mode, "test", self.dictionary),
+        })
         r.raise_for_status()
         return time.perf_counter() - t0
 

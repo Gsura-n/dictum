@@ -1,5 +1,5 @@
 from .base import Injector
-from .stdout import StdoutInjector, ClipboardInjector
+from .stdout import ClipboardInjector, StdoutInjector
 
 __all__ = ["Injector", "StdoutInjector", "ClipboardInjector", "create_injector"]
 
@@ -12,5 +12,5 @@ def create_injector(cfg: dict) -> Injector:
         return ClipboardInjector()
     if backend == "macos":
         from .macos import MacOSInjector
-        return MacOSInjector()
+        return MacOSInjector(**cfg.get("macos", {}))
     raise KeyError(f"Unknown inject backend '{backend}'")

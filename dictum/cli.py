@@ -15,7 +15,7 @@ console = Console()
 ENGINE_OPT = typer.Option(None, help="STT engine override: parakeet | whisper")
 MODE_OPT = typer.Option(None, help="Refinement mode: dictation | command | academic")
 REFINE_OPT = typer.Option(None, help="Refine backend override: passthrough | ollama")
-INJECT_OPT = typer.Option(None, help="Inject backend override: stdout | clipboard")
+INJECT_OPT = typer.Option("stdout", help="Inject backend: stdout | clipboard | macos")
 
 
 @app.command()
@@ -37,6 +37,71 @@ def modes():
     for name in cfg.mode_names:
         m = cfg.mode(name)
         t.add_row(name, m.model or f"{default_model} (default)", str(len(m.examples)), m.description)
+    console.print(t)
+
+
+@app.command()
+def run(engine: str = ENGINE_OPT):
+    """Always-on mode: hold the hotkey anywhere, talk, release to paste into the focused app."""
+    from .app import DictumApp
+    from . import permissions
+
+    if permissions.input_monitoring() is False:
+        permissions.input_monitoring(request=True)
+        console.print("[red]Input Monitoring is not granted[/] for this terminal. macOS has opened the prompt; "
+                      "enable it in System Settings > Privacy & Security > Input Monitoring, "
+                      "then quit and reopen the terminal.")
+        raise typer.Exit(1)
+    cfg = Config.load()
+    if cfg.inject.get("backend") == "macos" and permissions.accessibility() is False:
+        permissions.accessibility(request=True)
+        console.print("[red]Accessibility is not granted[/] for this terminal, so dictum cannot paste. "
+                      "Enable it in System Settings > Privacy & Security > Accessibility, then reopen the terminal.")
+        raise typer.Exit(1)
+    DictumApp(cfg, engine, console).run()
+
+
+@app.command()
+def check():
+    """Check permissions, microphone and Ollama models."""
+    from . import permissions
+
+    cfg = Config.load()
+    ok, bad, na = "[green]ok[/]", "[red]missing[/]", "[dim]n/a[/]"
+    t = Table("check", "status", "detail", show_header=False)
+
+    im, ax = permissions.input_monitoring(), permissions.accessibility()
+    t.add_row("Input Monitoring", ok if im else (na if im is None else bad), "hotkey (dictum run)")
+    t.add_row("Accessibility", ok if ax else (na if ax is None else bad), "paste into apps")
+
+    try:
+        from .capture import SoundDeviceCapture
+        c = SoundDeviceCapture(**{k: v for k, v in cfg.audio.items() if k in ("sample_rate", "channels", "device")})
+        t.add_row("Microphone", ok, f"{c.device_name} @ {c.device_rate} Hz")
+    except Exception as e:
+        t.add_row("Microphone", bad, str(e))
+
+    name, ecfg = cfg.stt_engine_config()
+    try:
+        from .stt import create_engine
+        create_engine(name, **ecfg)
+        t.add_row("STT engine", ok, f"{name}: {ecfg.get('model')}")
+    except Exception as e:
+        t.add_row("STT engine", bad, str(e))
+
+    if cfg.refine.get("backend") == "ollama":
+        o = cfg.refine.get("ollama", {})
+        needed = {o.get("model")} | {cfg.mode(m).model for m in cfg.mode_names if cfg.mode(m).model}
+        try:
+            import httpx
+            tags = httpx.get(f"{o.get('host', 'http://localhost:11434')}/api/tags", timeout=3).json()
+            have = {m["name"] for m in tags.get("models", [])}
+            t.add_row("Ollama", ok, o.get("host", ""))
+            for m in sorted(needed):
+                present = m in have or f"{m}:latest" in have
+                t.add_row(f"  model {m}", ok if present else bad, "" if present else f"ollama pull {m}")
+        except Exception as e:
+            t.add_row("Ollama", bad, f"not reachable ({type(e).__name__}); start Ollama")
     console.print(t)
 
 

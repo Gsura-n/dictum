@@ -36,7 +36,15 @@ class SoundDeviceCapture:
         self.sample_rate = sample_rate          # what the pipeline wants
         self.channels = channels
         self.device = device
-        info = sd.query_devices(device if device is not None else sd.default.device[0])
+        try:
+            # kind="input" resolves the system default input; sd.default.device
+            # can be -1 ("unset") which query_devices rejects.
+            info = sd.query_devices(device) if device is not None else sd.query_devices(kind="input")
+        except sd.PortAudioError as e:
+            raise RuntimeError(
+                "No usable input device. Connect a mic (AirPods must be connected, not just paired) "
+                "and check System Settings > Sound > Input."
+            ) from e
         self.device_name = info["name"]
         self.device_rate = int(info["default_samplerate"])   # what the mic runs at
         self._frames: list[np.ndarray] = []

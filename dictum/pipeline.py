@@ -44,12 +44,17 @@ class Pipeline:
         injector = create_injector(icfg)
         return cls(capture, stt, refiner, injector, cfg)
 
-    def warm_up(self, mode_name: str | None = None) -> dict[str, float]:
-        """Load STT weights and the refiner model for the given mode."""
+    def warm_up(self, mode_name: str | None = None, modes: list[str] | None = None) -> dict[str, float]:
+        """Load STT weights and the refiner model(s) for the given mode(s)."""
         t0 = time.perf_counter()
         self.stt.load()
         stt_s = time.perf_counter() - t0
-        refine_s = self.refiner.warm_up(self.cfg.mode(mode_name))
+        refine_s = 0.0
+        for m in (modes or [mode_name]):
+            try:
+                refine_s += self.refiner.warm_up(self.cfg.mode(m))
+            except Exception as e:
+                print(f"[warm-up] refiner for mode '{m}' unavailable: {e}", flush=True)
         return {"stt": stt_s, "refine": refine_s}
 
     def process(self, clip: AudioClip, mode_name: str | None = None) -> tuple[Refined, Timing]:
@@ -62,7 +67,12 @@ class Pipeline:
             refined = Refined(text=transcript.text, backend="skipped", mode=mode_name or "",
                               latency_s=0.0, source=transcript)
         else:
-            refined = self.refine_text(transcript, mode_name)
+            try:
+                refined = self.refine_text(transcript, mode_name)
+            except Exception as e:  # Ollama down, model missing, timeout...
+                # Degrade to the raw transcript rather than losing what was said.
+                refined = Refined(text=transcript.text, backend=f"failed ({type(e).__name__}: {e})",
+                                  mode=mode_name or "", latency_s=0.0, source=transcript)
         self.injector.inject(refined.text)
         total = time.perf_counter() - t0
         return refined, Timing(clip.duration_s, transcript.latency_s, refined.latency_s, total)

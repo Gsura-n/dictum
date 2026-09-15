@@ -26,7 +26,7 @@ whisper = ["mlx-whisper>=0.4"]
 # LLM refinement via Ollama (phase 2)
 refine = ["httpx>=0.27"]
 # macOS hotkey + text injection (phase 3)
-mac = ["pynput>=1.7", "pyobjc-framework-Quartz>=10.0"]
+mac = ["pyobjc-framework-Quartz>=10.0", "pyobjc-framework-Cocoa>=10.0"]
 dev = ["pytest>=8", "jiwer>=3.0"]
 all = ["dictum[parakeet,whisper,refine,mac,dev]"]
 

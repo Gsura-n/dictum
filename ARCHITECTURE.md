@@ -42,6 +42,16 @@ Interfaces are `typing.Protocol`, not abstract base classes. An adapter is any c
 
 **Injection via clipboard paste, not per-character keystrokes.** Simulated typing is slow and breaks on non-ASCII. Clipboard plus Cmd+V with clipboard restore is what mature tools do. It needs Accessibility permission; the stdout and clipboard injectors exist so the pipeline is usable before that permission is granted.
 
+**A raw Quartz event tap for the hotkey, not pynput.** pynput's macOS backend calls text input APIs off the main thread, which crashes on recent macOS. A listen-only `CGEventTap` on the main run loop is short, reads device-dependent modifier flags so Right Option and Left Option are different keys, and gives full control over edge cases: another key pressed while holding cancels the dictation, so Option shortcuts keep working.
+
+**Three threads, each with one job.** The main thread runs the Quartz run loop (macOS requires it). A recorder thread opens and closes the mic, because opening a Bluetooth input can take hundreds of milliseconds and the tap callback must return instantly or macOS disables it. A processor thread owns the models, since MLX state is per thread. Queues connect them, so dictating twice quickly just queues the second clip.
+
+**Clipboard restore that respects the user.** The injector snapshots every type on every pasteboard item (text, images, files), pastes, waits for the target app to read, and restores only if the clipboard has not changed since. A screenshot you copied before dictating is still there after.
+
+**Degrade, never lose words.** If Ollama is down or the model is missing, the raw transcript is pasted and a warning printed. If STT returns nothing, the LLM is never called, because a small model given an empty prompt will invent a plausible sentence (this happened during development).
+
+**Capture at the device's native rate.** Bluetooth headsets such as AirPods run their mic at 24 kHz and can return pure silence when opened at 16 kHz. Capture opens the device at whatever it reports and resamples with soxr.
+
 **Command mode never executes.** It produces a proposed command. Running it is a deliberate, separate action by the user.
 
 ## Latency budget (target on M4, 16 GB)
@@ -59,5 +69,5 @@ Interfaces are `typing.Protocol`, not abstract base classes. An adapter is any c
 
 - Phase 1: capture, STT, benchmark, terminal output (done)
 - Phase 2: Ollama refiner, modes with examples and per-mode models, dictionary (done)
-- Phase 3: global hotkey (hold to talk), macOS injector, menu bar presence
+- Phase 3: global hold-to-talk hotkey, paste into focused app with clipboard restore, permission checks (done)
 - Phase 4: app-aware mode selection, self-improving dictionary from user corrections, streaming partials, small overlay

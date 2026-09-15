@@ -24,7 +24,22 @@ refine:
     num_predict: 400     # hard cap on output tokens; dictation never needs more
 
 inject:
-  backend: stdout        # stdout | clipboard | macos   (macos arrives in phase 3)
+  backend: macos         # macos (paste into focused app) | clipboard | stdout
+  macos:
+    restore_clipboard: true   # put your previous clipboard back after pasting
+    restore_delay_s: 0.35
+
+# Global hold-to-talk keys for `dictum run`. Hold to record, release to paste.
+# Pressing any other key while holding cancels (so Option+letter shortcuts
+# still work). Supported: right_option, left_option, right_command,
+# left_command, right_shift, left_shift, right_control, left_control, fn,
+# f13 to f19.
+hotkeys:
+  hold:
+    right_option: dictation
+    right_command: command
+  min_hold_s: 0.35
+  sounds: true
 
 # Personal dictionary: words the models tend to get wrong. Appended to every
 # refinement prompt so spellings are preserved.
