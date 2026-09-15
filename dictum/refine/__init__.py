@@ -11,4 +11,7 @@ def create_refiner(cfg: dict, dictionary: list[str], backend: str | None = None)
     if backend == "ollama":
         from .ollama_refiner import OllamaRefiner
         return OllamaRefiner(dictionary=dictionary, **cfg.get("ollama", {}))
+    if backend == "mlx":
+        from .mlx_refiner import MLXRefiner
+        return MLXRefiner(dictionary=dictionary, **cfg.get("mlx", {}))
     raise KeyError(f"Unknown refine backend '{backend}'")

@@ -40,6 +40,8 @@ def wrap(text: str) -> str:
 
 def build_messages(mode: Mode, user_text: str, dictionary: list[str]) -> list[dict]:
     system = mode.prompt.strip()
+    for k, v in (mode.vars or {}).items():
+        system = system.replace("{" + k + "}", str(v))
     if dictionary:
         system += ("\n\nThese names and terms are spelled exactly like this when they occur: "
                    + ", ".join(dictionary) + ". Do not use them anywhere they were not said.")

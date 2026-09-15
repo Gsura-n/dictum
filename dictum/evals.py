@@ -41,6 +41,9 @@ DIFFICULTIES = ("easy", "medium", "hard")
 SUITES = ("targeted", "disflqa", "nl2bash")
 SEED = 20260915
 SIZES = {"disflqa": {"dev": 200, "test": 500}, "nl2bash": {"dev": 100, "test": 300}}
+# NL2Bash is a Linux dataset and is executed in a Linux sandbox, so the model is
+# told it is on Linux there. macOS behaviour is covered by the targeted suite.
+SUITE_VARS = {"nl2bash": {"platform_hint": "This is Linux with bash and GNU coreutils; use GNU flags."}}
 
 WER_PASS = 0.10         # disflqa: at most 1 word in 10 wrong vs the original question
 
@@ -151,37 +154,72 @@ def wer(hyp: str, ref: str) -> float:
 
 
 _LONG_SINGLE_DASH = {"find", "java", "ffmpeg", "xcodebuild", "security", "defaults", "osascript"}
-_SEP = re.compile(r"\|\||&&|\||;|\$\(|`")
+_WRAPPERS = {"sudo", "xargs", "time", "nohup", "env", "exec", "command", "builtin", "nice"}
+
+
+class _Backtick(list):
+    pass
 
 
 def command_parts(cmd: str) -> tuple[list[str], set[str]]:
-    """Utilities in pipeline order, and the set of flags used."""
-    utils, flags = [], set()
-    for seg in _SEP.split(cmd):
-        try:
-            toks = shlex.split(seg, posix=True)
-        except ValueError:
-            toks = seg.split()
-        toks = [t for t in toks if t not in ("sudo", "xargs", "time", "nohup") and not re.match(r"^\w+=", t)]
-        if not toks:
-            continue
-        util = toks[0].split("/")[-1]
+    """Utilities used (top level and inside $( ) / backticks) and the set of flags.
+
+    Quote-aware: a | inside a quoted regex is not a pipe. Wrappers like sudo
+    and xargs are skipped so `xargs mv` counts as mv.
+    """
+    cmd = cmd.replace("\\;", " ").replace("$(", " ( ").replace("`", " ` ")
+    try:
+        lex = shlex.shlex(cmd, posix=True, punctuation_chars="|&;()")
+        lex.whitespace_split = True
+        toks = list(lex)
+    except ValueError:
+        toks = cmd.split()
+    utils: list[str] = []
+    flags: set[str] = set()
+
+    def flush(seg: list[str]) -> None:
+        t = [x for x in seg if not re.match(r"^[A-Za-z_]\w*=", x)]
+        while t and t[0] in _WRAPPERS:
+            t = t[1:]
+            while t and t[0].startswith("-"):
+                t = t[1:]
+        if not t or t[0].startswith("-") or t[0] == "{}":
+            return
+        util = t[0].split("/")[-1]
         utils.append(util)
-        for t in toks[1:]:
-            if re.match(r"^--?[A-Za-z]", t):
-                t = t.split("=")[0]
-                # -la -> -l -a, except tools whose options are single-dash words (find -name)
-                if re.match(r"^-[A-Za-z]{2,}$", t) and util not in _LONG_SINGLE_DASH:
-                    flags |= {f"-{ch}" for ch in t[1:]}
+        for x in t[1:]:
+            if re.match(r"^--?[A-Za-z]", x):
+                x = x.split("=")[0]
+                if re.match(r"^-[A-Za-z]{2,}$", x) and util not in _LONG_SINGLE_DASH:   # -la -> -l -a
+                    flags.update(f"-{ch}" for ch in x[1:])
                 else:
-                    flags.add(t)
+                    flags.add(x)
+
+    stack: list[list[str]] = [[]]
+    for t in toks:
+        if t == "(":
+            stack.append([])
+        elif t == ")":
+            if len(stack) > 1:
+                flush(stack.pop())
+        elif t == "`":
+            if len(stack) > 1 and isinstance(stack[-1], _Backtick):
+                flush(stack.pop())
+            else:
+                stack.append(_Backtick())
+        elif t and set(t) <= set("|&;"):
+            flush(stack[-1])
+            stack[-1].clear()
+        else:
+            stack[-1].append(t)
+    while stack:
+        flush(stack.pop())
     return utils, flags
 
 
 def command_score(hyp: str, ref: str) -> dict:
     hu, hf = command_parts(hyp)
     ru, rf = command_parts(ref)
-    util_match = hu == ru
     if not hf and not rf:
         f1 = 1.0
     else:
@@ -189,7 +227,7 @@ def command_score(hyp: str, ref: str) -> dict:
         p = tp / len(hf) if hf else 0.0
         r = tp / len(rf) if rf else 0.0
         f1 = 2 * p * r / (p + r) if p + r else 0.0
-    return {"util_match": util_match, "flag_f1": f1}
+    return {"util_match": set(hu) == set(ru), "flag_f1": f1}
 
 
 def check(case: Case, output: str) -> list[str]:
@@ -205,7 +243,7 @@ def check(case: Case, output: str) -> list[str]:
         s = command_score(out, case.reference)
         fails = []
         if not s["util_match"]:
-            fails.append(f"utilities {command_parts(out)[0]} != {command_parts(case.reference)[0]}")
+            fails.append(f"utilities {sorted(set(command_parts(out)[0]))} != {sorted(set(command_parts(case.reference)[0]))}")
         if "\n" in out:
             fails.append("not single line")
         return fails
@@ -250,21 +288,28 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
 # --------------------------------------------------------------------------- running
 
 def run_eval(cfg: Config, modes: list[str] | None, models: list[str] | None, repeat: int, console,
-             suite: str = "targeted", split: str = "dev", limit: int | None = None) -> dict:
+             suite: str = "targeted", split: str = "dev", limit: int | None = None,
+             backend: str = "ollama", as_mode: str | None = None) -> dict:
     from . import dictionary as dict_mod
-    from .refine.ollama_refiner import OllamaRefiner
+    from .refine import create_refiner
 
     cases = load_suite(suite, split, modes)
     if modes:
         cases = [c for c in cases if c.mode in modes]
     if limit:
         cases = cases[:limit]
+    if as_mode:
+        cases = [replace(c, mode=as_mode) for c in cases]
     if not cases:
         raise SystemExit("no cases selected")
 
-    ocfg = dict(cfg.refine.get("ollama", {}))
-    ocfg["timeout_s"] = max(60, ocfg.get("timeout_s", 15))   # model swaps between runs can be slow
-    refiner = OllamaRefiner(dictionary=cfg.dictionary, **ocfg)
+    rcfg = {k: (dict(v) if isinstance(v, dict) else v) for k, v in cfg.refine.items()}
+    if backend == "ollama":
+        rcfg.setdefault("ollama", {})
+        rcfg["ollama"]["timeout_s"] = max(60, rcfg["ollama"].get("timeout_s", 15))  # model swaps can be slow
+    elif models:
+        raise SystemExit("--models only applies to the ollama backend")
+    refiner = create_refiner(rcfg, cfg.dictionary, backend=backend)
     default_entries = refiner.entries
 
     by_mode: dict[str, list[Case]] = {}
@@ -275,7 +320,7 @@ def run_eval(cfg: Config, modes: list[str] | None, models: list[str] | None, rep
     for mode_name, mode_cases in by_mode.items():
         base = cfg.mode(mode_name)
         for model in (models or [refiner.model_for(base)]):
-            mode = replace(base, model=model)
+            mode = replace(base, model=model, vars={**base.vars, **SUITE_VARS.get(suite, {})})
             with console.status(f"warming {model} for {mode_name}..."):
                 refiner.warm_up(mode)
             t_start = time.perf_counter()
@@ -325,6 +370,11 @@ def summarize(results: dict) -> list[dict]:
             s["mean_wer"] = float(np.mean([r["wer"] for r in rs if "wer" in r]))
         if any("flag_f1" in r for r in rs):
             s["flag_f1"] = float(np.mean([r["flag_f1"] for r in rs if "flag_f1" in r]))
+        ex = [r for r in rs if r.get("exec_executable")]
+        if ex:
+            k_ex = sum(bool(r.get("exec_match")) for r in ex)
+            s["exec_n"], s["exec_pass"] = len(ex), k_ex / len(ex)
+            s["exec_ci_low"], s["exec_ci_high"] = wilson(k_ex, len(ex))
         for d in DIFFICULTIES:
             ds = [r for r in rs if r["difficulty"] == d]
             s[d] = (sum(r["passed"] for r in ds) / len(ds)) if ds else None

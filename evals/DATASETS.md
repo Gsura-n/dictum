@@ -9,7 +9,9 @@
 Rules:
 - Prompts, examples and guards may be tuned against `dev` only. `test` is run to report numbers, and its failures are not read while tuning.
 - Samples are drawn with a fixed seed so every run and every model sees the same cases.
-- The `train` portions (Disfl-QA 7,182; NL2Bash ~8,000) are untouched and reserved for possible fine-tuning. They never overlap with `dev` or `test`.
+- The Disfl-QA `train` split (7,182) is used only by `scripts/finetune/prepare_data.py`. Items whose text also appears in dev or test are dropped (29 of them). A 300-row validation set for training is carved from train, never from dev.
+- NL2Bash rows outside the seeded dev and test slices are reserved as train and not used yet.
+- Command cases are also scored by execution (`--exec`): both commands run in a no-network Docker sandbox on identical fixture files, and a case counts only if the reference itself runs. NL2Bash is scored with a Linux platform hint because the sandbox is Linux.
 
 Known limitations:
 - Disfl-QA disfluencies were typed by annotators, not transcribed from audio, and every item is a question. It is the best openly licensed human source of self-corrections, and a strong test of "clean up the question, do not answer it", but it is not spontaneous speech.

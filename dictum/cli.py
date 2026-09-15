@@ -203,6 +203,9 @@ def eval_(
     repeat: int = typer.Option(1, help="Runs per case (use 3 to see flakiness)"),
     failures: bool = typer.Option(None, "--failures/--no-failures", help="Print failing cases (default: on for dev, off for test)"),
     markdown: bool = typer.Option(False, help="Also print a markdown table for the README"),
+    exec_: bool = typer.Option(False, "--exec", help="Command mode: also score by running commands in a Docker sandbox"),
+    backend: str = typer.Option("ollama", help="ollama | mlx (mlx uses refine.mlx model + adapter from config)"),
+    as_mode: str = typer.Option(None, help="Run every case under this mode instead (e.g. dictation_ft)"),
 ):
     """Score the refine stage: pass rate with 95% CI, latency, and suite-specific metrics."""
     from . import evals
@@ -212,9 +215,17 @@ def eval_(
     cfg = Config.load()
     results = evals.run_eval(cfg, mode.split(",") if mode else None,
                              [m.strip() for m in models.split(",")] if models else None, repeat, console,
-                             suite=suite, split=split, limit=limit)
+                             suite=suite, split=split, limit=limit, backend=backend, as_mode=as_mode)
+    if exec_:
+        from .exec_eval import score_rows
+        score_rows(results["rows"], console)
     summary = evals.summarize(results)
     path = evals.save(results)
+    _print_summary(summary, suite, split, markdown, path, results, failures)
+
+
+def _print_summary(summary, suite, split, markdown, path, results, failures):
+    from . import evals
 
     show = failures if failures is not None else (split == "dev")
     if show:
@@ -240,6 +251,8 @@ def eval_(
             extra.append(f"wer {s['mean_wer']:.3f}")
         if "flag_f1" in s:
             extra.append(f"flag F1 {s['flag_f1']:.2f}")
+        if "exec_pass" in s:
+            extra.append(f"[bold]exec {s['exec_pass']:.0%}[/] ({s['exec_ci_low']:.0%} to {s['exec_ci_high']:.0%}, n={s['exec_n']})")
         t.add_row(s["mode"], s["model"], str(s["n"]), f"[bold]{pct(s['pass'])}[/]",
                   f"{s['ci_low']:.0%} to {s['ci_high']:.0%}", pct(s["hard"]), str(s["guard_trips"]),
                   ", ".join(extra), f"{s['p50_s']:.2f}", f"{s['p95_s']:.2f}")
@@ -247,6 +260,29 @@ def eval_(
     if markdown:
         console.print(evals.markdown_table(summary))
     console.print(f"[dim]full results: {path}[/]")
+
+
+@app.command()
+def rescore(
+    results_file: Path = typer.Argument(..., help="A saved evals/results/*.json file"),
+    exec_: bool = typer.Option(True, "--exec/--no-exec", help="Execution-based scoring for command rows"),
+):
+    """Re-apply scorers to saved outputs without calling the LLM again."""
+    import json
+    from . import evals
+
+    results = json.loads(results_file.read_text())
+    for r in results["rows"]:
+        if r.get("suite") == "nl2bash" or (r.get("mode") == "command" and r["case"].startswith("nl2bash")):
+            r.update(evals.command_score(r["output"], r["reference"]))
+            r["passed"] = r["util_match"] and "\n" not in r["output"].strip()
+    if exec_:
+        from .exec_eval import score_rows
+        score_rows(results["rows"], console)
+    summary = evals.summarize(results)
+    out = results_file.with_name(results_file.stem + "-rescored.json")
+    out.write_text(json.dumps(dict(results, summary=summary), indent=2))
+    _print_summary(summary, results.get("suite", ""), results.get("split", ""), False, out, results, False)
 
 
 @app.command()

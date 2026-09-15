@@ -23,6 +23,7 @@ DATA = ROOT / "evals" / "data"
 
 FILES = {
     "disflqa/dev.json": "https://raw.githubusercontent.com/google-research-datasets/Disfl-QA/main/dev.json",
+    "disflqa/train.json": "https://raw.githubusercontent.com/google-research-datasets/Disfl-QA/main/train.json",
     "disflqa/test.json": "https://raw.githubusercontent.com/google-research-datasets/Disfl-QA/main/test.json",
     "nl2bash/all.nl": "https://raw.githubusercontent.com/TellinaTool/nl2bash/master/data/bash/all.nl",
     "nl2bash/all.cm": "https://raw.githubusercontent.com/TellinaTool/nl2bash/master/data/bash/all.cm",

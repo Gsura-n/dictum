@@ -33,7 +33,7 @@ def test_wer_and_command_scoring():
     assert wer("In what country is Normandy located?", "In what country is Normandy located?") == 0.0
     assert wer("what country is Normandy located", "In what country is Normandy located?") == 1 / 6
     u, f = command_parts("find . -name '*.pyc' -delete | xargs wc -l")
-    assert u == ["find", "wc"] and {"-name", "-delete", "-l"} <= f
+    assert set(u) == {"find", "wc"} and {"-name", "-delete", "-l"} <= f
     assert command_score("ls -la", "ls -al")["util_match"] and command_score("ls -la", "ls -al")["flag_f1"] == 1.0
     assert not command_score("du -sh", "df -h")["util_match"]
 
@@ -42,3 +42,11 @@ def test_wilson_interval():
     from dictum.evals import wilson
     lo, hi = wilson(94, 100)
     assert 0.87 < lo < 0.89 and 0.97 < hi < 0.98
+
+
+def test_command_parser_edge_cases():
+    from dictum.evals import command_parts
+    assert set(command_parts('find . -type l -exec sh -c "file -b {} | grep -q ^broken" \\; -print')[0]) == {"find"}
+    assert set(command_parts("sudo chgrp $(whoami) myprogram")[0]) == {"chgrp", "whoami"}
+    assert set(command_parts("find /a -name '*.csv' -print0 | xargs -0 mv -t d")[0]) == {"find", "mv"}
+    assert set(command_parts('find . -regex "./c(([4-6][0-9])|70)_data.txt"')[0]) == {"find"}

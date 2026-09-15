@@ -28,6 +28,8 @@ refine = ["httpx>=0.27"]
 # macOS hotkey + text injection (phase 3)
 mac = ["pyobjc-framework-Quartz>=10.0", "pyobjc-framework-Cocoa>=10.0"]
 dev = ["pytest>=8", "jiwer>=3.0"]
+# MLX refiner backend and LoRA fine-tuning (Apple Silicon)
+mlx = ["mlx-lm>=0.31"]
 all = ["dictum[parakeet,whisper,refine,mac,dev]"]
 
 [project.scripts]
