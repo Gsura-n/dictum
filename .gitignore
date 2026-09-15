@@ -8,3 +8,4 @@ benchmarks/samples/*.wav
 benchmarks/results/
 .DS_Store
 config/local.yaml
+evals/results/

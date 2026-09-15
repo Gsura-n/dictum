@@ -176,6 +176,43 @@ def refine(
         console.print(r.text)
 
 
+@app.command("eval")
+def eval_(
+    mode: str = typer.Option(None, help="Only these modes, comma-separated (default: all with cases)"),
+    models: str = typer.Option(None, help="Compare these Ollama models, comma-separated (default: mode's configured model)"),
+    repeat: int = typer.Option(1, help="Runs per case (use 3 to see flakiness)"),
+    failures: bool = typer.Option(True, "--failures/--no-failures", help="Print each failing case"),
+    markdown: bool = typer.Option(False, help="Also print a markdown table for the README"),
+):
+    """Score the refine stage against evals/cases: pass rate by difficulty and latency."""
+    from . import evals
+
+    cfg = Config.load()
+    results = evals.run_eval(cfg, mode.split(",") if mode else None,
+                             [m.strip() for m in models.split(",")] if models else None, repeat, console)
+    summary = evals.summarize(results)
+    path = evals.save(results)
+
+    if failures:
+        for r in results["rows"]:
+            if not r["passed"]:
+                console.print(f"[red]✗[/] [bold]{r['mode']}/{r['case']}[/] [dim]({r['difficulty']}, {r['model']})[/]")
+                console.print(f"   [dim]in: [/] {r['input']}")
+                console.print(f"   [dim]out:[/] {r['output']}")
+                console.print(f"   [dim]why:[/] [yellow]{'; '.join(r['failures'])}[/]")
+
+    def pct(x):
+        return "n/a" if x is None else f"{x:.0%}"
+    t = Table("mode", "model", "n", "pass", "easy", "medium", "hard", "p50 s", "p95 s", "sim", title="Refine eval")
+    for s in summary:
+        t.add_row(s["mode"], s["model"], str(s["n"]), f"[bold]{pct(s['pass'])}[/]", pct(s["easy"]),
+                  pct(s["medium"]), pct(s["hard"]), f"{s['p50_s']:.2f}", f"{s['p95_s']:.2f}", f"{s['similarity']:.2f}")
+    console.print(t)
+    if markdown:
+        console.print(evals.markdown_table(summary))
+    console.print(f"[dim]full results: {path}[/]")
+
+
 @app.command()
 def bench(
     samples: Path = typer.Option(Path("benchmarks/samples"), help="Directory of .wav files (+ optional .txt references)"),
