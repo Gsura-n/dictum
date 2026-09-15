@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dictum"
+version = "0.1.0"
+description = "Local-first voice dictation: hold a key, talk, get clean text in any app. No cloud."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "numpy>=1.26",
+  "sounddevice>=0.4.7",
+  "soundfile>=0.12",
+  "pyyaml>=6.0",
+  "typer>=0.12",
+  "rich>=13.7",
+]
+
+[project.optional-dependencies]
+# Speech-to-text engines (pick one or both)
+parakeet = ["parakeet-mlx>=0.3"]
+whisper = ["mlx-whisper>=0.4"]
+# LLM refinement via Ollama (phase 2)
+refine = ["httpx>=0.27"]
+# macOS hotkey + text injection (phase 3)
+mac = ["pynput>=1.7", "pyobjc-framework-Quartz>=10.0"]
+dev = ["pytest>=8", "jiwer>=3.0"]
+all = ["dictum[parakeet,whisper,refine,mac,dev]"]
+
+[project.scripts]
+dictum = "dictum.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["dictum*"]

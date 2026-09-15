@@ -1,0 +1,57 @@
+# Architecture
+
+## The problem, split into four
+
+"Replicate Wispr Flow locally" sounds like a speech recognition problem. It is mostly not. It is four separate problems that have to feel like one:
+
+1. Capture: a global hotkey that starts and stops the microphone from any app.
+2. Speech to text: fast enough that the result appears about as soon as you release the key.
+3. Refinement: an LLM pass that removes filler, applies self-corrections, punctuates, and adapts tone to the target.
+4. Injection: putting the text into whatever field has focus, in any app, as if you typed it.
+
+Each has a different failure mode, a different set of dependencies, and a different platform surface. So each is its own stage with its own interface, and `Pipeline` is the only place they touch.
+
+```
+dictum/
+  capture/   AudioCapture   start() / stop() -> AudioClip
+  stt/       STTEngine      transcribe(AudioClip) -> Transcript      + registry
+  refine/    Refiner        refine(Transcript, Mode) -> Refined
+  inject/    Injector       inject(str)
+  pipeline.py               Pipeline.from_config(cfg).process(clip)
+  config.py                 YAML with local overrides; modes and dictionary live here
+  types.py                  AudioClip, Transcript, Refined
+```
+
+Interfaces are `typing.Protocol`, not abstract base classes. An adapter is any class with the right methods; nothing to inherit, nothing to register except one line in the STT registry. Optional dependencies are imported lazily inside adapters so `pip install dictum` never pulls in three model runtimes you do not use.
+
+## Decisions and why
+
+**Pluggable STT with two adapters from day one.** Model choice in this space changes every few months. The registry means a new engine is one file. Shipping two adapters also makes the benchmark meaningful: the point is to pick based on measured latency and WER on the user's own voice, not on a leaderboard.
+
+**Parakeet TDT as default, Whisper as the known quantity.** Parakeet has a lower real-time factor at equal or better English accuracy. Whisper is multilingual and familiar. Both run through MLX so they use the Apple Silicon GPU without a CUDA dependency.
+
+**Modes are configuration, not code.** A mode is a name, a description and a system prompt in YAML. Dictation, command and academic are just three entries. Users add their own without touching Python. In phase 4 a mode can also be selected automatically by the focused application.
+
+**Refinement is a stage, not a feature of STT.** Keeping it separate means it can be turned off (passthrough), swapped (Ollama today, MLX-native later), and measured on its own. The latency budget is the whole point: if STT plus refine exceeds about 1.5 seconds, people stop using push-to-talk tools.
+
+**Injection via clipboard paste, not per-character keystrokes.** Simulated typing is slow and breaks on non-ASCII. Clipboard plus Cmd+V with clipboard restore is what mature tools do. It needs Accessibility permission; the stdout and clipboard injectors exist so the pipeline is usable before that permission is granted.
+
+**Command mode never executes.** It produces a proposed command. Running it is a deliberate, separate action by the user.
+
+## Latency budget (target on M4, 16 GB)
+
+| stage | target |
+|---|---|
+| STT (5 s clip) | < 0.5 s |
+| refine (3B model, short text) | < 0.8 s |
+| inject | < 0.1 s |
+| total after key release | < 1.5 s |
+
+`dictum listen` prints all of these on every utterance so regressions are visible immediately.
+
+## Roadmap
+
+- Phase 1: capture, STT, benchmark, terminal output (this)
+- Phase 2: Ollama refiner, mode prompts live, dictionary biasing
+- Phase 3: global hotkey (hold to talk), macOS injector, menu bar presence
+- Phase 4: app-aware mode selection, self-improving dictionary from user corrections, streaming partials, small overlay

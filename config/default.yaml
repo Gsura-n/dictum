@@ -1,0 +1,53 @@
+# Dictum default configuration.
+# Copy to config/local.yaml to override without touching the defaults.
+
+audio:
+  sample_rate: 16000     # every STT engine here expects 16 kHz mono
+  channels: 1
+  device: null           # null = system default input; run `dictum devices` to list
+
+stt:
+  engine: parakeet       # which adapter to use: parakeet | whisper
+  engines:
+    parakeet:
+      model: mlx-community/parakeet-tdt-0.6b-v2
+    whisper:
+      model: mlx-community/whisper-large-v3-turbo
+
+refine:
+  backend: passthrough   # passthrough | ollama   (ollama arrives in phase 2)
+  ollama:
+    host: http://localhost:11434
+    model: qwen2.5:3b
+    timeout_s: 10
+
+inject:
+  backend: stdout        # stdout | clipboard | macos   (macos arrives in phase 3)
+
+# Personal dictionary: words the models tend to get wrong. Used to bias
+# refinement (and STT, for engines that support prompting).
+dictionary:
+  - Gauttam
+
+# Modes are just different refinement configurations. Phase 1 ignores the
+# prompts (passthrough); they are here so the architecture is visible now.
+default_mode: dictation
+modes:
+  dictation:
+    description: Clean up spoken text. Remove filler, fix self-corrections, punctuate.
+    prompt: |
+      You clean up dictated speech. Remove filler words (um, uh, like, you know),
+      apply self-corrections (keep only the corrected version), add punctuation
+      and capitalisation. Keep the speaker's wording and tone. Output only the
+      cleaned text, nothing else.
+  command:
+    description: Turn speech into a single shell command. Never executes it.
+    prompt: |
+      Convert the spoken request into one macOS zsh command. Output only the
+      command, no explanation, no code fences.
+  academic:
+    description: Rewrite as formal academic prose (APA 7 style).
+    prompt: |
+      Rewrite the dictated text as clear, formal academic prose suitable for a
+      doctoral paper in APA 7 style. Preserve every claim; do not add citations
+      or content. Output only the rewritten text.

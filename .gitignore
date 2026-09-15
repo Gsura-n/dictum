@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+benchmarks/samples/*.wav
+benchmarks/results/
+.DS_Store
+config/local.yaml

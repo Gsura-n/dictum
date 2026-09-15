@@ -1,0 +1,39 @@
+"""Shared data types passed between pipeline stages."""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+import numpy as np
+
+
+@dataclass
+class AudioClip:
+    samples: np.ndarray        # float32, mono, shape (n,)
+    sample_rate: int
+
+    @property
+    def duration_s(self) -> float:
+        return len(self.samples) / self.sample_rate
+
+
+@dataclass
+class Transcript:
+    text: str
+    engine: str
+    latency_s: float           # wall-clock time inside the STT engine
+    audio_s: float             # duration of the audio transcribed
+    extra: dict = field(default_factory=dict)
+
+    @property
+    def rtf(self) -> float:
+        """Real-time factor: processing time / audio time. Lower is better."""
+        return self.latency_s / self.audio_s if self.audio_s else float("nan")
+
+
+@dataclass
+class Refined:
+    text: str
+    backend: str
+    mode: str
+    latency_s: float
+    source: Transcript
