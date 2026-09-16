@@ -195,7 +195,7 @@ def refine(
 
 @app.command("eval")
 def eval_(
-    suite: str = typer.Option("targeted", help="targeted | disflqa | nl2bash (see evals/DATASETS.md)"),
+    suite: str = typer.Option("targeted", help="targeted | disflqa | disflspeech | nl2bash (see evals/DATASETS.md)"),
     split: str = typer.Option("dev", help="dev (tune against) | test (report only; do not read failures while tuning)"),
     mode: str = typer.Option(None, help="Only these modes, comma-separated"),
     models: str = typer.Option(None, help="Compare these Ollama models, comma-separated (default: mode's configured model)"),

@@ -3,18 +3,20 @@
 # Usage: scripts/finetune/train.sh [iters]      e.g. scripts/finetune/train.sh 100   (smoke run)
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-ITERS=${1:-540}          # ~1 epoch at batch 16 over 8,641 rows
-BATCH=${BATCH:-16}
+ITERS=${1:-2160}         # ~1 epoch at micro-batch 4 over 8,641 rows (overnight.sh computes this from the data)
+BATCH=${BATCH:-4}
+ACCUM=${ACCUM:-4}         # effective batch = BATCH * ACCUM = 16
 BASE=${BASE:-mlx-community/Llama-3.2-3B-Instruct-4bit}
 ADAPTER=${ADAPTER:-adapters/dictation-llama3.2-3b}
 
 pip install -q 'mlx-lm>=0.31'
-python scripts/finetune/prepare_data.py
+[ "${SKIP_PREP:-0}" = 1 ] || python scripts/finetune/prepare_data.py
 
 # Notes on settings:
 #  lr 1e-4, rank 8 on 16 layers: standard small-data LoRA starting point
-#  batch 16, no grad checkpointing: the 100-step smoke run peaked at 3.2 GB with
-#    batch 4 + checkpointing, so memory is not the constraint on a 16 GB M4; speed is
+#  micro-batch 4 x grad accumulation 4, with grad checkpointing: a straight batch of 16
+#    without checkpointing ran out of GPU memory on a 16 GB M4 (peak 11.6 GB, then OOM on
+#    a long batch) and was no faster in tokens/sec, so the small micro-batch costs nothing
 #  --mask-prompt: loss only on the cleaned output, not on the prompt we already know
 python -m mlx_lm lora \
   --model "$BASE" \
@@ -23,13 +25,15 @@ python -m mlx_lm lora \
   --adapter-path "$ADAPTER" \
   --iters "$ITERS" \
   --batch-size "$BATCH" \
+  --grad-accumulation-steps "$ACCUM" \
+  --grad-checkpoint \
   --learning-rate 1e-4 \
   --num-layers 16 \
   --mask-prompt \
   --max-seq-length 512 \
   --steps-per-report 20 \
-  --steps-per-eval 100 \
-  --save-every 100 \
+  --steps-per-eval 500 \
+  --save-every 200 \
   --seed 20260915
 
 echo

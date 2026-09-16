@@ -38,9 +38,10 @@ CASES_DIR = ROOT / "evals" / "cases"
 DATA_DIR = ROOT / "evals" / "data"
 RESULTS_DIR = ROOT / "evals" / "results"
 DIFFICULTIES = ("easy", "medium", "hard")
-SUITES = ("targeted", "disflqa", "nl2bash")
+SUITES = ("targeted", "disflqa", "disflspeech", "nl2bash")
 SEED = 20260915
-SIZES = {"disflqa": {"dev": 200, "test": 500}, "nl2bash": {"dev": 100, "test": 300}}
+SIZES = {"disflqa": {"dev": 200, "test": 500}, "nl2bash": {"dev": 100, "test": 300},
+         "disflspeech": {"dev": 250, "test": 250}}
 # NL2Bash is a Linux dataset and is executed in a Linux sandbox, so the model is
 # told it is on Linux there. macOS behaviour is covered by the targeted suite.
 SUITE_VARS = {"nl2bash": {"platform_hint": "This is Linux with bash and GNU coreutils; use GNU flags."}}
@@ -102,6 +103,15 @@ def load_disflqa(split: str) -> list[Case]:
     return out
 
 
+def load_disflspeech(split: str) -> list[Case]:
+    from .disflspeech import load_pairs
+    fname = {"dev": "validation", "test": "test"}[split]
+    pairs = load_pairs(_need(DATA_DIR / "disflspeech" / f"{fname}.jsonl"))
+    return [Case(id=f"disflspeech-{split}-{k}", mode="dictation", difficulty="external", input=src,
+                 reference=tgt, scorer="wer", suite="disflspeech", dictionary=[])
+            for k, (src, tgt) in enumerate(pairs[: SIZES["disflspeech"][split]])]
+
+
 def load_nl2bash(split: str) -> list[Case]:
     nl = _need(DATA_DIR / "nl2bash" / "all.nl").read_text().splitlines()
     cm = _need(DATA_DIR / "nl2bash" / "all.cm").read_text().splitlines()
@@ -143,6 +153,8 @@ def load_suite(suite: str, split: str, modes: list[str] | None) -> list[Case]:
         return load_disflqa(split)
     if suite == "nl2bash":
         return load_nl2bash(split)
+    if suite == "disflspeech":
+        return load_disflspeech(split)
     raise SystemExit(f"unknown suite '{suite}'. Choose from {SUITES}")
 
 

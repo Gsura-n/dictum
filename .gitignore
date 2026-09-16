@@ -11,3 +11,4 @@ config/local.yaml
 evals/results/
 evals/data/
 adapters/
+logs/

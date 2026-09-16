@@ -3,6 +3,7 @@
 | suite | source | authored by | license | split used for tuning | split used for reporting |
 |---|---|---|---|---|---|
 | `disflqa` | [Disfl-QA](https://github.com/google-research-datasets/Disfl-QA), Gupta et al. 2021 | human annotators | CC BY 4.0 | 200 sampled from `dev` | 500 sampled from `test` |
+| `disflspeech` | [DisfluencySpeech](https://huggingface.co/datasets/amaai-lab/DisfluencySpeech), AMAAI Lab 2024 (text from Switchboard) | human annotators | Apache 2.0 | 250 from `validation` | 250 from `test` |
 | `nl2bash` | [NL2Bash](https://github.com/TellinaTool/nl2bash), Lin et al. 2018 | Bash programmers | MIT (data) | 100 from a seeded split of executable cases | 300 from the same |
 | `targeted` | `evals/cases/*.yaml` | written for this project with an AI assistant | MIT | all | not used for headline numbers |
 
@@ -21,3 +22,4 @@ Known limitations:
 Attribution: Disfl-QA © Google LLC, licensed CC BY 4.0. NL2Bash © the NL2Bash authors, MIT. Neither is redistributed in this repository; `scripts/fetch_datasets.py` downloads them.
 
 - NL2Bash is filtered to cases whose reference command actually runs in the sandbox fixture (`dictum prep-nl2bash`). About a quarter do; the rest reference files, users or hosts that do not exist. This biases the suite toward file and text commands, which is also what people dictate.
+- DisfluencySpeech pairs are `transcript_a` (non-speech events removed) to `transcript_c` (fillers, discourse markers, editing terms and false starts removed). Annotation marks are stripped, and targets get deterministic sentence casing and a final period. Only text columns are downloaded; the audio is not. Its train split is mixed with Disfl-QA train for fine-tuning, with dev/test overlaps removed.
