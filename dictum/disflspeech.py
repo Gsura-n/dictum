@@ -23,6 +23,8 @@ def strip_markup(t: str) -> str:
     t = _BRACE_TAG.sub("", t or "")
     t = _MARKUP.sub(" ", t)
     t = re.sub(r"\s+([,.?!])", r"\1", t)
+    t = re.sub(r"(,\s*){2,}", ", ", t)          # ", ," left where a filler was removed
+    t = re.sub(r",\s*([.?!])", r"\1", t)         # "though,." -> "though."
     return re.sub(r"\s+", " ", t).strip(" -,")
 
 
