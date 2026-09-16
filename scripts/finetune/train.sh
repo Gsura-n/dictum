@@ -17,6 +17,8 @@ pip install -q 'mlx-lm>=0.31'
 #  micro-batch 4 x grad accumulation 4, with grad checkpointing: a straight batch of 16
 #    without checkpointing ran out of GPU memory on a 16 GB M4 (peak 11.6 GB, then OOM on
 #    a long batch) and was no faster in tokens/sec, so the small micro-batch costs nothing
+#  --clear-cache-threshold 2GB: free MLX's reusable GPU buffer cache whenever it grows past
+#    2 GB, so cached buffers from long batches cannot pile up over a multi-hour run
 #  --mask-prompt: loss only on the cleaned output, not on the prompt we already know
 python -m mlx_lm lora \
   --model "$BASE" \
@@ -27,6 +29,7 @@ python -m mlx_lm lora \
   --batch-size "$BATCH" \
   --grad-accumulation-steps "$ACCUM" \
   --grad-checkpoint \
+  --clear-cache-threshold "${CLEAR_CACHE:-2GB}" \
   --learning-rate 1e-4 \
   --num-layers 16 \
   --mask-prompt \
