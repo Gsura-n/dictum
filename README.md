@@ -73,6 +73,19 @@ Early results on the 30 hand-written targeted cases (written with an AI assistan
 
 What moved those numbers was mostly not the model: delimiting the transcript so it is treated as data (this fixed prompt injection), deterministic output guards, fixing dictionary words in code before the LLM runs, and few-shot examples kept separate from eval cases.
 
+## Personalization (optional, local)
+
+Dictum ships with a fine-tuned dictation adapter, downloaded once on first use; nobody needs to train anything to use it. If you want it to learn your own vocabulary and phrasing:
+
+```bash
+dictum history                  # after setting history.enabled: true in config/local.yaml
+dictum correct --text "what it should have been"    # or --ok when the output was right
+dictum personalize              # after 50+ corrections: trains on top of the shipped adapter
+dictum personalize --reset      # back to the shipped adapter
+```
+
+Personalization continues training from the shipped adapter on your corrections mixed with general examples, scores old vs new on a held-out slice of your own corrections, and only switches if the new one is at least as good. History and adapters live in `~/.dictum/` and never leave the machine.
+
 ## Configuration
 
 `config/default.yaml` holds everything: audio device, engine and model names, refinement backend, injection backend, modes and your personal dictionary. Copy it to `config/local.yaml` for overrides; that file is git-ignored.

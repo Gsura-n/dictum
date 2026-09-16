@@ -14,4 +14,7 @@ def create_refiner(cfg: dict, dictionary: list[str], backend: str | None = None)
     if backend == "mlx":
         from .mlx_refiner import MLXRefiner
         return MLXRefiner(dictionary=dictionary, normalize=cfg.get("normalize"), **cfg.get("mlx", {}))
+    if backend == "auto":
+        from .router import RouterRefiner
+        return RouterRefiner(cfg, dictionary, create_refiner)
     raise KeyError(f"Unknown refine backend '{backend}'")

@@ -19,8 +19,12 @@ class MLXRefiner:
     name = "mlx"
 
     def __init__(self, model="mlx-community/Llama-3.2-3B-Instruct-4bit", adapter_path=None,
-                 max_tokens=300, dictionary=None, normalize=None, **_):
-        self.model_id, self.adapter_path, self.max_tokens = model, adapter_path, max_tokens
+                 max_tokens=300, dictionary=None, normalize=None, adapter_fallback=None,
+                 use_personal=True, **_):
+        self.model_id, self.max_tokens = model, max_tokens
+        # Local adapter if it exists, else the published one, else the base model.
+        from ..adapters import resolve
+        self.adapter_path = resolve(adapter_path, use_personal) or resolve(adapter_fallback, False)
         self.entries = dict_mod.parse(dictionary)
         self.normalize_cfg = normalize
         self._model = self._tok = None

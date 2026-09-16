@@ -32,6 +32,7 @@ class Mode:
     guard: dict = field(default_factory=dict)      # see refine/guards.py
     vars: dict = field(default_factory=dict)       # {name} placeholders substituted into prompt
     dictionary_hint: bool = True                   # append dictionary words to the prompt
+    backend: str | None = None                     # with refine.backend: auto, which engine serves this mode
 
 
 @dataclass
@@ -84,4 +85,4 @@ class Config:
         return Mode(name=name, description=m.get("description", ""), prompt=m.get("prompt", ""),
                     model=m.get("model"), examples=list(m.get("examples") or []),
                     guard=dict(m.get("guard") or {}), vars=dict(m.get("vars") or {}),
-                    dictionary_hint=bool(m.get("dictionary_hint", True)))
+                    dictionary_hint=bool(m.get("dictionary_hint", True)), backend=m.get("backend"))

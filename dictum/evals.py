@@ -61,6 +61,7 @@ class Case:
     dictionary: list | None = None
     scorer: str = "checks"         # checks | wer | command
     suite: str = "targeted"
+    audio: str | None = None       # set by audio_eval.attach_audio for end-to-end runs
 
 
 # --------------------------------------------------------------------------- loading
@@ -321,7 +322,7 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
 
 def run_eval(cfg: Config, modes: list[str] | None, models: list[str] | None, repeat: int, console,
              suite: str = "targeted", split: str = "dev", limit: int | None = None,
-             backend: str = "ollama", as_mode: str | None = None) -> dict:
+             backend: str = "ollama", as_mode: str | None = None, audio: str | None = None) -> dict:
     from . import dictionary as dict_mod
     from .refine import create_refiner
 
@@ -334,6 +335,18 @@ def run_eval(cfg: Config, modes: list[str] | None, models: list[str] | None, rep
         cases = [replace(c, mode=as_mode) for c in cases]
     if not cases:
         raise SystemExit("no cases selected")
+
+    stt = None
+    if audio:
+        # End to end: each case's audio goes through STT, and the refiner sees the
+        # transcript instead of the dataset text. Scoring is unchanged.
+        from .audio_eval import attach_audio
+        from .stt import create_engine
+        cases = attach_audio(cases, suite, split, audio, console)
+        stt_name, stt_cfg = cfg.stt_engine_config()
+        stt = create_engine(stt_name, **stt_cfg)
+        with console.status(f"loading {stt_name} for audio eval..."):
+            stt.load()
 
     rcfg = {k: (dict(v) if isinstance(v, dict) else v) for k, v in cfg.refine.items()}
     if backend == "ollama":
@@ -361,7 +374,17 @@ def run_eval(cfg: Config, modes: list[str] | None, models: list[str] | None, rep
                     eta = (time.perf_counter() - t_start) / max(1, i - 1) * (len(mode_cases) - i + 1) if i > 1 else 0
                     console.print(f"[dim]{suite}/{split} {mode_name} {model} {i}/{len(mode_cases)} "
                                   f"(~{eta / 60:.0f} min left)[/]" + " " * 10, end="\r")
-                    tr = Transcript(text=case.input, engine="eval", latency_s=0.0, audio_s=0.0)
+                    if stt is not None:
+                        from .capture.sounddevice_capture import resample
+                        import soundfile as sf
+                        samples, sr = sf.read(case.audio, dtype="float32", always_2d=False)
+                        if samples.ndim > 1:
+                            samples = samples.mean(axis=1)
+                        from .types import AudioClip
+                        clip = AudioClip(samples=resample(samples, sr, 16000), sample_rate=16000)
+                        tr = stt.transcribe(clip)
+                    else:
+                        tr = Transcript(text=case.input, engine="eval", latency_s=0.0, audio_s=0.0)
                     refiner.entries = dict_mod.parse(case.dictionary) if case.dictionary is not None else default_entries
                     notes = []
                     try:
@@ -375,6 +398,10 @@ def run_eval(cfg: Config, modes: list[str] | None, models: list[str] | None, rep
                            "input": case.input, "reference": case.reference, "output": out,
                            "passed": not fails, "failures": fails, "notes": notes,
                            "latency_s": round(lat, 3), "similarity": round(similarity(out, case.reference), 3)}
+                    if stt is not None:
+                        row.update({"audio": case.audio, "stt_text": tr.text, "stt_s": round(tr.latency_s, 3),
+                                    "audio_s": round(tr.audio_s, 2),
+                                    "stt_wer": round(wer(tr.text, case.input), 3)})
                     if case.scorer == "wer":
                         row["wer"] = round(wer(out, case.reference), 3)
                     if case.scorer == "command":
@@ -400,6 +427,10 @@ def summarize(results: dict) -> list[dict]:
              "similarity": float(np.mean([r["similarity"] for r in rs if r["reference"]] or [float("nan")]))}
         if any("wer" in r for r in rs):
             s["mean_wer"] = float(np.mean([r["wer"] for r in rs if "wer" in r]))
+        if any("stt_wer" in r for r in rs):
+            s["stt_wer"] = float(np.mean([r["stt_wer"] for r in rs if "stt_wer" in r]))
+            s["stt_p50_s"] = float(np.percentile([r["stt_s"] for r in rs if "stt_s" in r], 50))
+            s["e2e_p50_s"] = float(np.percentile([r["stt_s"] + r["latency_s"] for r in rs if "stt_s" in r], 50))
         if any("flag_f1" in r for r in rs):
             s["flag_f1"] = float(np.mean([r["flag_f1"] for r in rs if "flag_f1" in r]))
         ex = [r for r in rs if r.get("exec_executable")]
@@ -417,6 +448,8 @@ def summarize(results: dict) -> list[dict]:
 def save(results: dict) -> Path:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     tag = f"{results.get('suite', 'targeted')}-{results.get('split', '')}".rstrip("-")
+    if any("stt_text" in r for r in results["rows"]):
+        tag += "-audio"
     path = RESULTS_DIR / f"{datetime.now():%Y%m%d-%H%M%S}-{tag}.json"
     path.write_text(json.dumps(dict(results, summary=summarize(results)), indent=2))
     return path

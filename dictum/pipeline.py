@@ -74,6 +74,12 @@ class Pipeline:
                 refined = Refined(text=transcript.text, backend=f"failed ({type(e).__name__}: {e})",
                                   mode=mode_name or "", latency_s=0.0, source=transcript)
         self.injector.inject(refined.text)
+        if self.cfg.raw.get("history", {}).get("enabled") and refined.text.strip():
+            try:
+                from . import history
+                refined.notes.append(f"history #{history.record(transcript.text, refined.text, refined.mode)}")
+            except Exception as e:
+                refined.notes.append(f"history not saved: {e}")
         total = time.perf_counter() - t0
         return refined, Timing(clip.duration_s, transcript.latency_s, refined.latency_s, total)
 

@@ -39,6 +39,9 @@ FILES = {
 
 
 def main() -> int:
+    if "--audio" in sys.argv:
+        fetch_disflspeech_audio()
+        return 0
     for rel, url in FILES.items():
         dest = DATA / rel
         if dest.exists() and dest.stat().st_size > 0:
@@ -69,6 +72,51 @@ def fetch_swda() -> None:
     with zipfile.ZipFile(zpath) as z:
         z.extractall(dest)
     zpath.unlink()
+
+
+def fetch_disflspeech_audio() -> None:
+    """Human recordings for DisfluencySpeech validation and test only (500 clips).
+
+    Train audio is never downloaded. Each clip is written as a WAV plus a manifest
+    line carrying its transcripts, so eval cases can be matched by text.
+    """
+    import io
+    import json
+    try:
+        import pyarrow.parquet as pq
+        import soundfile as sf
+        from huggingface_hub import HfFileSystem
+    except ImportError:
+        print("pip install pyarrow huggingface_hub soundfile")
+        return
+    fs = HfFileSystem()
+    repo = "datasets/amaai-lab/DisfluencySpeech"
+    files = fs.glob(f"{repo}/**/*.parquet") or fs.glob(f"{repo}@refs%2Fconvert%2Fparquet/**/*.parquet")
+    out = DATA / "disflspeech" / "audio"
+    for split in ("validation", "test"):
+        manifest = out / f"{split}.jsonl"
+        if manifest.exists():
+            print(f"have  disflspeech audio {split}")
+            continue
+        (out / split).mkdir(parents=True, exist_ok=True)
+        lines, n = [], 0
+        for path in sorted(f for f in files if split in f.lower() or (split == "validation" and "valid" in f.lower())):
+            with fs.open(path, "rb") as fh:
+                pf = pq.ParquetFile(fh)
+                cols = [c for c in pf.schema_arrow.names if c.startswith("transcript") or c == "audio"]
+                for batch in pf.iter_batches(columns=cols, batch_size=32):
+                    for r in batch.to_pylist():
+                        a = r.get("audio") or {}
+                        data = a.get("bytes") if isinstance(a, dict) else None
+                        if not data:
+                            continue
+                        samples, sr = sf.read(io.BytesIO(data), dtype="float32", always_2d=False)
+                        rel = f"{split}/{n:04d}.wav"
+                        sf.write(out / rel, samples, sr)
+                        lines.append(json.dumps({"audio": rel, **{k: v for k, v in r.items() if k != "audio"}}))
+                        n += 1
+            print(f"fetch disflspeech audio {split} <- {path.split('/', 3)[-1]} ({n} clips so far)")
+        manifest.write_text("\n".join(lines) + "\n")
 
 
 def fetch_disflspeech() -> None:

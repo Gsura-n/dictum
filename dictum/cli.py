@@ -207,6 +207,7 @@ def eval_(
     backend: str = typer.Option("ollama", help="ollama | mlx (mlx uses refine.mlx model + adapter from config)"),
     as_mode: str = typer.Option(None, help="Run every case under this mode instead (e.g. dictation_ft)"),
     adapter: str = typer.Option(None, help="mlx backend: adapter path, or 'none' for the base model"),
+    audio: str = typer.Option(None, help="End to end through STT: 'real' (DisfluencySpeech recordings) or 'tts' (macOS say)"),
 ):
     """Score the refine stage: pass rate with 95% CI, latency, and suite-specific metrics."""
     from . import evals
@@ -214,11 +215,14 @@ def eval_(
     if split not in ("dev", "test"):
         raise typer.BadParameter("split must be dev or test")
     cfg = Config.load()
+    mlx_cfg = cfg.raw.setdefault("refine", {}).setdefault("mlx", {})
+    mlx_cfg["use_personal"] = False          # evals never pick up a user's personal adapter
     if adapter is not None:
-        cfg.raw.setdefault("refine", {}).setdefault("mlx", {})["adapter_path"] = None if adapter == "none" else adapter
+        mlx_cfg["adapter_path"] = None if adapter == "none" else adapter
+        mlx_cfg["adapter_fallback"] = None   # "none" must mean the base model, not the published adapter
     results = evals.run_eval(cfg, mode.split(",") if mode else None,
                              [m.strip() for m in models.split(",")] if models else None, repeat, console,
-                             suite=suite, split=split, limit=limit, backend=backend, as_mode=as_mode)
+                             suite=suite, split=split, limit=limit, backend=backend, as_mode=as_mode, audio=audio)
     if exec_:
         from .exec_eval import score_rows
         score_rows(results["rows"], console)
@@ -254,6 +258,8 @@ def _print_summary(summary, suite, split, markdown, path, results, failures):
             extra.append(f"wer {s['mean_wer']:.3f}")
         if "flag_f1" in s:
             extra.append(f"flag F1 {s['flag_f1']:.2f}")
+        if "stt_wer" in s:
+            extra.append(f"STT wer {s['stt_wer']:.3f}, end to end p50 {s['e2e_p50_s']:.2f}s")
         if "exec_pass" in s:
             extra.append(f"[bold]exec {s['exec_pass']:.0%}[/] ({s['exec_ci_low']:.0%} to {s['exec_ci_high']:.0%}, n={s['exec_n']})")
         t.add_row(s["mode"], s["model"], str(s["n"]), f"[bold]{pct(s['pass'])}[/]",
@@ -333,6 +339,55 @@ def rescore(
     out = results_file.with_name(results_file.stem + "-rescored.json")
     out.write_text(json.dumps(dict(results, summary=summary), indent=2))
     _print_summary(summary, results.get("suite", ""), results.get("split", ""), False, out, results, False)
+
+
+@app.command("history")
+def history_cmd(limit: int = typer.Option(15, help="How many recent dictations"),
+                clear: bool = typer.Option(False, help="Delete all local history")):
+    """Show recent dictations (stored locally only when history.enabled is true)."""
+    from . import history
+    if clear:
+        console.print(f"deleted {history.clear()} entries")
+        return
+    t = Table("id", "mode", "pasted", "corrected")
+    for e in history.recent(limit):
+        t.add_row(str(e.id), e.mode or "", e.output, e.corrected or "")
+    console.print(t)
+
+
+@app.command()
+def correct(
+    entry_id: int = typer.Argument(None, help="History id (default: most recent dictation)"),
+    text: str = typer.Option(None, "--text", help="What it should have been (omit to type it interactively)"),
+    ok: bool = typer.Option(False, "--ok", help="Mark the output as correct as-is"),
+):
+    """Record what a dictation should have been. Corrections train `dictum personalize`."""
+    from . import history
+    e = history.get(entry_id) if entry_id else next(iter(history.recent(1)), None)
+    if e is None:
+        raise typer.BadParameter("no dictation found (is history.enabled true?)")
+    console.print(f"[dim]#{e.id} heard:[/] {e.transcript}\n[dim]pasted:[/] {e.output}")
+    fixed = e.output if ok else (text or typer.prompt("should have been", default=e.output))
+    history.correct(e.id, fixed)
+    n = len(history.training_pairs())
+    console.print(f"[green]saved[/] ({n} corrections so far; personalize needs 50)")
+
+
+@app.command()
+def personalize(
+    iters: int = typer.Option(None, help="Training steps (default: about 2 passes over your data)"),
+    dry_run: bool = typer.Option(False, help="Build the training data only"),
+    reset: bool = typer.Option(False, help="Remove the personal adapter and go back to the base one"),
+):
+    """Fine-tune the dictation model further on your own corrections, locally."""
+    from .adapters import PERSONAL
+    if reset:
+        import shutil
+        shutil.rmtree(PERSONAL, ignore_errors=True)
+        console.print("personal adapter removed")
+        return
+    from .personalize import run
+    run(console, iters=iters, dry_run=dry_run)
 
 
 @app.command()
