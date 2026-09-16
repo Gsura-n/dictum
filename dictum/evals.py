@@ -109,11 +109,31 @@ def load_nl2bash(split: str) -> list[Case]:
              if n.strip() and c.strip() and not n.startswith("(GNU specific)")]
     pairs = [(i, re.sub(r"^\((BSD|macOS) specific\)\s*", "", n), c) for i, n, c in pairs]
     random.Random(SEED).shuffle(pairs)
+    exe_path = DATA_DIR / "nl2bash" / "executable.json"
+    if exe_path.exists() and split in ("dev", "test"):
+        # Keep only cases whose reference actually runs in the sandbox fixture
+        # (see `dictum prep-nl2bash`). Order is preserved, so splits stay seeded.
+        ok = set(json.loads(exe_path.read_text())["executable"])
+        pairs = [p for p in pairs if p[0] in ok]
     n_dev, n_test = SIZES["nl2bash"]["dev"], SIZES["nl2bash"]["test"]
     # dev and test come from disjoint slices at the front; the rest is reserved as train.
+    if exe_path.exists() and len(pairs) < n_dev + n_test:
+        # Too few runnable cases for the nominal sizes: keep the 1:3 dev:test ratio.
+        n_dev = len(pairs) // 4
+        n_test = len(pairs) - n_dev
     chosen = pairs[:n_dev] if split == "dev" else pairs[n_dev:n_dev + n_test]
     return [Case(id=f"nl2bash-{i}", mode="command", difficulty="external", input=n, reference=c,
                  scorer="command", suite="nl2bash", dictionary=[]) for i, n, c in chosen]
+
+
+def nl2bash_candidates() -> list[tuple[int, str, str]]:
+    """All usable pairs in seeded order, before any executability filter."""
+    nl = _need(DATA_DIR / "nl2bash" / "all.nl").read_text().splitlines()
+    cm = _need(DATA_DIR / "nl2bash" / "all.cm").read_text().splitlines()
+    pairs = [(i, n.strip(), c.strip()) for i, (n, c) in enumerate(zip(nl, cm))
+             if n.strip() and c.strip() and not n.startswith("(GNU specific)")]
+    random.Random(SEED).shuffle(pairs)
+    return pairs
 
 
 def load_suite(suite: str, split: str, modes: list[str] | None) -> list[Case]:

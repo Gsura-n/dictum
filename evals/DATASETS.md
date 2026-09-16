@@ -3,7 +3,7 @@
 | suite | source | authored by | license | split used for tuning | split used for reporting |
 |---|---|---|---|---|---|
 | `disflqa` | [Disfl-QA](https://github.com/google-research-datasets/Disfl-QA), Gupta et al. 2021 | human annotators | CC BY 4.0 | 200 sampled from `dev` | 500 sampled from `test` |
-| `nl2bash` | [NL2Bash](https://github.com/TellinaTool/nl2bash), Lin et al. 2018 | Bash programmers | MIT (data) | 100 from a seeded split | 300 from a seeded split |
+| `nl2bash` | [NL2Bash](https://github.com/TellinaTool/nl2bash), Lin et al. 2018 | Bash programmers | MIT (data) | 100 from a seeded split of executable cases | 300 from the same |
 | `targeted` | `evals/cases/*.yaml` | written for this project with an AI assistant | MIT | all | not used for headline numbers |
 
 Rules:
@@ -19,3 +19,5 @@ Known limitations:
 - NL2Bash descriptions are written, not spoken.
 
 Attribution: Disfl-QA © Google LLC, licensed CC BY 4.0. NL2Bash © the NL2Bash authors, MIT. Neither is redistributed in this repository; `scripts/fetch_datasets.py` downloads them.
+
+- NL2Bash is filtered to cases whose reference command actually runs in the sandbox fixture (`dictum prep-nl2bash`). About a quarter do; the rest reference files, users or hosts that do not exist. This biases the suite toward file and text commands, which is also what people dictate.

@@ -206,6 +206,7 @@ def eval_(
     exec_: bool = typer.Option(False, "--exec", help="Command mode: also score by running commands in a Docker sandbox"),
     backend: str = typer.Option("ollama", help="ollama | mlx (mlx uses refine.mlx model + adapter from config)"),
     as_mode: str = typer.Option(None, help="Run every case under this mode instead (e.g. dictation_ft)"),
+    adapter: str = typer.Option(None, help="mlx backend: adapter path, or 'none' for the base model"),
 ):
     """Score the refine stage: pass rate with 95% CI, latency, and suite-specific metrics."""
     from . import evals
@@ -213,6 +214,8 @@ def eval_(
     if split not in ("dev", "test"):
         raise typer.BadParameter("split must be dev or test")
     cfg = Config.load()
+    if adapter is not None:
+        cfg.raw.setdefault("refine", {}).setdefault("mlx", {})["adapter_path"] = None if adapter == "none" else adapter
     results = evals.run_eval(cfg, mode.split(",") if mode else None,
                              [m.strip() for m in models.split(",")] if models else None, repeat, console,
                              suite=suite, split=split, limit=limit, backend=backend, as_mode=as_mode)
@@ -260,6 +263,53 @@ def _print_summary(summary, suite, split, markdown, path, results, failures):
     if markdown:
         console.print(evals.markdown_table(summary))
     console.print(f"[dim]full results: {path}[/]")
+
+
+@app.command("prep-nl2bash")
+def prep_nl2bash(
+    target: int = typer.Option(None, help="Stop after this many executable references (default: dev + test sizes)"),
+):
+    """Run NL2Bash reference commands in the sandbox and keep the ones that work.
+
+    Most NL2Bash references point at files, users or hosts that do not exist,
+    so they cannot be scored by execution. This walks the seeded order and
+    records executable cases until there are enough for dev and test.
+    """
+    import json
+    from . import evals
+    from .exec_eval import Sandbox, executable
+
+    target = target or sum(evals.SIZES["nl2bash"].values())
+    pairs = evals.nl2bash_candidates()
+    out = evals.DATA_DIR / "nl2bash" / "executable.json"
+    progress = evals.DATA_DIR / "nl2bash" / "executable.partial.json"
+    ok, tried, infra = [], 0, 0
+    if progress.exists():          # resume after Ctrl+C or a crash
+        st = json.loads(progress.read_text())
+        ok, tried, infra = st["executable"], st["tried"], st.get("infra_errors", 0)
+        console.print(f"[dim]resuming: tried {tried}, executable {len(ok)}[/]")
+
+    def save(path):
+        path.write_text(json.dumps({"seed": evals.SEED, "tried": tried, "executable": ok, "infra_errors": infra}))
+
+    with Sandbox(console) as sb:
+        for i, _nl, cmd in pairs[tried:]:
+            res = sb.run(cmd)
+            tried += 1
+            infra += bool(res.get("infra_error"))
+            if executable(res, sb.pristine):
+                ok.append(i)
+            console.print(f"[dim]checked {tried}/{len(pairs)} reference commands, {len(ok)}/{target} runnable "
+                          f"({len(ok) / tried:.0%}), sandbox restarts {sb.restarts}[/]" + " " * 6, end="\r")
+            if tried % 100 == 0:
+                save(progress)
+            if len(ok) >= target:
+                break
+    save(out)
+    progress.unlink(missing_ok=True)
+    console.print(f"\n{len(ok)} runnable of {tried} checked ({len(ok) / tried:.0%}); infra errors {infra}. saved {out}")
+    if len(ok) < target:
+        console.print(f"[yellow]only {len(ok)} runnable cases; dev/test will be smaller than {target}[/]")
 
 
 @app.command()

@@ -36,32 +36,61 @@ class Sandbox:
         if shutil.which("docker") is None:
             raise SystemExit("execution scoring needs Docker. Install Docker Desktop and start it.")
         self.console = console
+        if _docker("info").returncode != 0:
+            raise SystemExit("Docker is installed but not running. Open Docker Desktop, wait for it to say "
+                             "'Engine running', then try again.")
         if _docker("image", "inspect", IMAGE).returncode != 0:
             if console:
                 console.print("[dim]building sandbox image (first time only, ~1 min)...[/]")
             r = _docker("build", "-t", IMAGE, str(SANDBOX_DIR))
             if r.returncode != 0:
                 raise SystemExit(f"sandbox build failed:\n{r.stderr[-2000:]}")
+        self._cache: dict[str, dict] = {}
+        self.restarts = 0
+        self._start()
+        self.pristine = self.run("true")["fs"]
+
+    def _start(self) -> None:
         self.name = f"dictum-sandbox-{uuid.uuid4().hex[:8]}"
         r = _docker("run", "-d", "--rm", "--name", self.name, "--network", "none",
-                    "--memory", "768m", "--cpus", "1", "--pids-limit", "256",
+                    "--memory", "1536m", "--cpus", "1", "--pids-limit", "256",
                     "--tmpfs", "/runs:size=1g", IMAGE)
         if r.returncode != 0:
             raise SystemExit(f"could not start sandbox: {r.stderr}")
-        self._cache: dict[str, dict] = {}
-        self.pristine = self.run("true")["fs"]
 
-    def run(self, cmd: str) -> dict:
-        if cmd in self._cache:
-            return self._cache[cmd]
+    def _alive(self) -> bool:
+        r = _docker("inspect", "-f", "{{.State.Running}}", self.name)
+        return r.returncode == 0 and r.stdout.strip() == "true"
+
+    def _exec(self, cmd: str) -> dict | None:
         try:
             r = subprocess.run(["docker", "exec", "-i", self.name, "python3", "/opt/sandbox/runner.py"],
                                input=cmd, capture_output=True, text=True, timeout=30)
-            res = json.loads(r.stdout) if r.stdout.strip() else {"rc": -2, "timed_out": False, "stdout": "",
-                                                                  "stderr": r.stderr, "fs": "error"}
         except subprocess.TimeoutExpired:
-            res = {"rc": -1, "timed_out": True, "stdout": "", "stderr": "host timeout", "fs": "timeout"}
-        self._cache[cmd] = res
+            return {"rc": -1, "timed_out": True, "stdout": "", "stderr": "host timeout", "fs": "timeout"}
+        if r.stdout.strip():
+            try:
+                return json.loads(r.stdout)
+            except json.JSONDecodeError:
+                pass
+        return None   # infrastructure failure, not a command result
+
+    def run(self, cmd: str) -> dict:
+        """Runs cmd in a fresh fixture copy. If the sandbox itself breaks (a command
+        exhausted memory or temp space and the container died), restart it and
+        retry once, so one bad command cannot silently fail every later case."""
+        if cmd in self._cache:
+            return self._cache[cmd]
+        res = self._exec(cmd)
+        if res is None:
+            if not self._alive() or self._exec("true") is None:
+                _docker("rm", "-f", self.name)
+                self._start()
+                self.restarts += 1
+            res = self._exec(cmd) or {"rc": -2, "timed_out": False, "stdout": "", "stderr": "sandbox error",
+                                      "fs": "error", "infra_error": True}
+        if not res.get("infra_error"):
+            self._cache[cmd] = res
         return res
 
     def close(self) -> None:
