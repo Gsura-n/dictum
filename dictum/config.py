@@ -31,6 +31,7 @@ class Mode:
     examples: list[dict[str, str]] = field(default_factory=list)  # [{in, out}]
     guard: dict = field(default_factory=dict)      # see refine/guards.py
     vars: dict = field(default_factory=dict)       # {name} placeholders substituted into prompt
+    dictionary_hint: bool = True                   # append dictionary words to the prompt
 
 
 @dataclass
@@ -82,4 +83,5 @@ class Config:
             raise KeyError(f"Unknown mode '{name}'. Known: {self.mode_names}")
         return Mode(name=name, description=m.get("description", ""), prompt=m.get("prompt", ""),
                     model=m.get("model"), examples=list(m.get("examples") or []),
-                    guard=dict(m.get("guard") or {}), vars=dict(m.get("vars") or {}))
+                    guard=dict(m.get("guard") or {}), vars=dict(m.get("vars") or {}),
+                    dictionary_hint=bool(m.get("dictionary_hint", True)))

@@ -35,6 +35,7 @@ def tidy_target(t: str) -> str:
     t = re.sub(r"\bi\b", "I", t)
     t = re.sub(r"\bi'(m|ve|ll|d)\b", lambda m: "I'" + m.group(1), t)
     t = t[0].upper() + t[1:]
+    t = re.sub(r"([.?!]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(), t)
     if t[-1] not in ".?!":
         t += "."
     return t

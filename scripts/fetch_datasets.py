@@ -10,6 +10,10 @@ Datasets (both human-written, neither AI-generated):
   comes from Switchboard telephone conversations, with human-annotated
   transcripts at increasing levels of cleanup. Only the text columns are
   downloaded, not the audio. https://huggingface.co/datasets/amaai-lab/DisfluencySpeech
+- SwDA, Switchboard Dialog Act Corpus (Jurafsky et al. 1997; distribution by
+  C. Potts, GPL-2.0). ~220k utterances of telephone conversation with
+  human disfluency markup (fillers, discourse markers, repairs), from which
+  disfluent/clean pairs are derived by rule. https://github.com/cgpotts/swda
 - NL2Bash (Lin et al., LREC 2018, data MIT). ~10k English descriptions written
   by Bash programmers, paired with one-liners collected from sites such as
   Stack Overflow. https://github.com/TellinaTool/nl2bash
@@ -45,8 +49,26 @@ def main() -> int:
         with urllib.request.urlopen(url, timeout=60) as r:
             dest.write_bytes(r.read())
     fetch_disflspeech()
+    fetch_swda()
     print(f"done. data in {DATA}")
     return 0
+
+
+def fetch_swda() -> None:
+    import zipfile
+    dest = DATA / "swda"
+    if any(dest.glob("**/*utt.csv")):
+        print("have  swda")
+        return
+    dest.mkdir(parents=True, exist_ok=True)
+    zpath = dest / "swda.zip"
+    url = "https://github.com/cgpotts/swda/raw/master/swda.zip"
+    print(f"fetch swda <- {url}")
+    with urllib.request.urlopen(url, timeout=120) as r:
+        zpath.write_bytes(r.read())
+    with zipfile.ZipFile(zpath) as z:
+        z.extractall(dest)
+    zpath.unlink()
 
 
 def fetch_disflspeech() -> None:

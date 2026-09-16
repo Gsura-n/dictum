@@ -4,6 +4,7 @@
 |---|---|---|---|---|---|
 | `disflqa` | [Disfl-QA](https://github.com/google-research-datasets/Disfl-QA), Gupta et al. 2021 | human annotators | CC BY 4.0 | 200 sampled from `dev` | 500 sampled from `test` |
 | `disflspeech` | [DisfluencySpeech](https://huggingface.co/datasets/amaai-lab/DisfluencySpeech), AMAAI Lab 2024 (text from Switchboard) | human annotators | Apache 2.0 | 250 from `validation` | 250 from `test` |
+| (training only) `swda` | [Switchboard Dialog Act Corpus](https://github.com/cgpotts/swda), Jurafsky et al. 1997 | human annotators (disfluency markup) | GPL-2.0 distribution | not used | not used |
 | `nl2bash` | [NL2Bash](https://github.com/TellinaTool/nl2bash), Lin et al. 2018 | Bash programmers | MIT (data) | 100 from a seeded split of executable cases | 300 from the same |
 | `targeted` | `evals/cases/*.yaml` | written for this project with an AI assistant | MIT | all | not used for headline numbers |
 
@@ -23,3 +24,5 @@ Attribution: Disfl-QA © Google LLC, licensed CC BY 4.0. NL2Bash © the NL2Bash 
 
 - NL2Bash is filtered to cases whose reference command actually runs in the sandbox fixture (`dictum prep-nl2bash`). About a quarter do; the rest reference files, users or hosts that do not exist. This biases the suite toward file and text commands, which is also what people dictate.
 - DisfluencySpeech pairs are `transcript_a` (non-speech events removed) to `transcript_c` (fillers, discourse markers, editing terms and false starts removed). Annotation marks are stripped, and targets get deterministic sentence casing and a final period. Only text columns are downloaded; the audio is not. Its train split is mixed with Disfl-QA train for fine-tuning, with dev/test overlaps removed.
+- SwDA pairs are derived by rule from Meteer-style markup: fillers {F}, discourse markers {D} and editing terms {E} removed; in [ X + Y ] repairs only Y is kept; conjunctions {C} and asides {A} kept; non-speech and partial words removed. Consecutive units of one speaker turn are joined (up to 3). Because SwDA and DisfluencySpeech share Switchboard as a source, any SwDA turn sharing an 8-word sequence with a DisfluencySpeech dev/test sentence is dropped (453 turns).
+- Training mix is capped per source (default Disfl-QA 4,000, DisfluencySpeech 4,500, SwDA 16,000, plus 20% identity rows) so no single source dominates.

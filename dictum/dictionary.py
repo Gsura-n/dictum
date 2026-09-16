@@ -37,7 +37,8 @@ def parse(raw) -> list[Entry]:
 
 def apply(text: str, entries: list[Entry]) -> str:
     # Longest variants first so "use effect hook" wins over "use effect".
-    pairs = sorted(((v, e.word) for e in entries for v in e.sounds_like), key=lambda p: -len(p[0]))
+    # The word itself is also a variant, so "gauttam" gets its casing fixed.
+    pairs = sorted(((v, e.word) for e in entries for v in [*e.sounds_like, e.word]), key=lambda p: -len(p[0]))
     for variant, word in pairs:
         pattern = r"(?<![\w@./-])" + r"\s+".join(map(re.escape, variant.split())) + r"(?![\w@-])"
         text = re.sub(pattern, word, text, flags=re.IGNORECASE)

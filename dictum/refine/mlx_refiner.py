@@ -11,17 +11,18 @@ import time
 from .. import dictionary as dict_mod
 from ..config import Mode
 from ..types import Refined, Transcript
-from . import guards
-from .ollama_refiner import build_messages, clean_output
+from .common import refine_with
+from .ollama_refiner_utils import build_messages
 
 
 class MLXRefiner:
     name = "mlx"
 
     def __init__(self, model="mlx-community/Llama-3.2-3B-Instruct-4bit", adapter_path=None,
-                 max_tokens=300, dictionary=None, **_):
+                 max_tokens=300, dictionary=None, normalize=None, **_):
         self.model_id, self.adapter_path, self.max_tokens = model, adapter_path, max_tokens
         self.entries = dict_mod.parse(dictionary)
+        self.normalize_cfg = normalize
         self._model = self._tok = None
 
     def model_for(self, mode: Mode) -> str:
@@ -47,12 +48,5 @@ class MLXRefiner:
         return time.perf_counter() - t0
 
     def refine(self, transcript: Transcript, mode: Mode) -> Refined:
-        t0 = time.perf_counter()
-        source = dict_mod.apply(transcript.text, self.entries)
-        raw_out = clean_output(self._generate(mode, source, self.max_tokens))
-        text, reason = guards.check(mode.guard, source, raw_out)
-        notes = [f"guard: {reason}; used transcript"] if reason else []
-        if source != transcript.text:
-            notes.append("dictionary applied")
-        return Refined(text=text, backend=self.name, mode=mode.name,
-                       latency_s=time.perf_counter() - t0, source=transcript, notes=notes)
+        return refine_with(lambda m, t: self._generate(m, t, self.max_tokens), self.name, transcript, mode,
+                           self.entries, self.normalize_cfg)

@@ -10,8 +10,8 @@ def create_refiner(cfg: dict, dictionary: list[str], backend: str | None = None)
         return Passthrough()
     if backend == "ollama":
         from .ollama_refiner import OllamaRefiner
-        return OllamaRefiner(dictionary=dictionary, **cfg.get("ollama", {}))
+        return OllamaRefiner(dictionary=dictionary, normalize=cfg.get("normalize"), **cfg.get("ollama", {}))
     if backend == "mlx":
         from .mlx_refiner import MLXRefiner
-        return MLXRefiner(dictionary=dictionary, **cfg.get("mlx", {}))
+        return MLXRefiner(dictionary=dictionary, normalize=cfg.get("normalize"), **cfg.get("mlx", {}))
     raise KeyError(f"Unknown refine backend '{backend}'")

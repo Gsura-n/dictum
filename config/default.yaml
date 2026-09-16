@@ -23,6 +23,10 @@ refine:
     timeout_s: 15
     keep_alive: 30m      # keep weights resident between utterances
     num_predict: 400     # hard cap on output tokens; dictation never needs more
+  normalize:             # deterministic rules applied before the LLM (dictation modes)
+    spoken_punctuation: true   # "comma", "period", "new paragraph" ...
+    spoken_addresses: true     # "j patel at outlook dot com" -> jpatel@outlook.com
+    repeated_words: true       # "the the" -> "the"
   mlx:                   # in-process MLX; used for the fine-tuned dictation model
     model: mlx-community/Llama-3.2-3B-Instruct-4bit
     adapter_path: adapters/dictation-llama3.2-3b
@@ -130,6 +134,7 @@ modes:
 
   dictation_ft:
     description: Dictation cleanup for the fine-tuned model (short prompt; behaviour learned from data).
+    dictionary_hint: false   # it never saw a dictionary line in training; respellings happen in code
     guard:
       max_ratio: 1.6
       min_ratio: 0.3
