@@ -12,3 +12,4 @@ evals/results/
 evals/data/
 adapters/
 logs/
+scripts/cluster/hosts.json

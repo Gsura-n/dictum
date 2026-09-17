@@ -101,6 +101,38 @@ def collapse_repeats(text: str) -> str:
     return re.sub(r"\b(\w+)(?:,?\s+\1\b)+", rep, text, flags=re.IGNORECASE)
 
 
+# "scratch that" / "strike that" as an editing command. Not when it is a real
+# verb phrase: "don't scratch that", "scratch that itch", "strike that off the list".
+_SCRATCH = re.compile(
+    r"(?<!\bto )(?<!\bnot )(?<!n't )\b(?:scratch|strike) that\b(?!\s+(?:itch|off|out|from|one|line|word|part))[\s,.!;:-]*",
+    re.IGNORECASE)
+_BOUNDARY = re.compile(r"[.?!;](?=\s|$)")
+
+
+def scratch_that(text: str) -> str:
+    """Delete what the speaker retracted.
+
+    "X Y scratch that Z"            -> "Z"   (retracts the sentence it is in)
+    "X Y. Scratch that. Z"          -> "Z"   (starts a sentence: retracts the previous one)
+    Never reaches past a paragraph break; call it per segment.
+    """
+    for _ in range(10):                      # repeated commands in one segment
+        m = _SCRATCH.search(text)
+        if not m:
+            break
+        before, after = text[:m.start()], text[m.end():]
+        bounds = [b.end() for b in _BOUNDARY.finditer(before)]
+        cut = bounds[-1] if bounds else 0
+        if not before[cut:].strip():         # command starts its own sentence: retract the previous sentence
+            cut = bounds[-2] if len(bounds) >= 2 else 0
+        keep = before[:cut].rstrip()
+        after = after.lstrip()
+        if after and (not keep or keep[-1] in ".?!"):
+            after = after[0].upper() + after[1:]
+        text = (keep + " " + after).strip()
+    return text
+
+
 def split_breaks(text: str) -> list[tuple[str, str]]:
     """[(segment_text, break_after)], break_after in {"", "\\n", "\\n\\n"}."""
     parts = _BREAK.split(text)
@@ -118,7 +150,8 @@ def split_breaks(text: str) -> list[tuple[str, str]]:
 
 
 def apply(text: str, cfg: dict | None = None) -> list[tuple[str, str]]:
-    cfg = {"spoken_punctuation": True, "spoken_addresses": True, "repeated_words": True, **(cfg or {})}
+    cfg = {"spoken_punctuation": True, "spoken_addresses": True, "repeated_words": True,
+           "scratch_that": True, **(cfg or {})}
     if cfg["spoken_addresses"]:
         text = spoken_addresses(text)
     if cfg["repeated_words"]:
@@ -126,6 +159,9 @@ def apply(text: str, cfg: dict | None = None) -> list[tuple[str, str]]:
     segments = split_breaks(text) if cfg["spoken_punctuation"] else [(text, "")]
     if cfg["spoken_punctuation"]:
         segments = [(spoken_punctuation(s), b) for s, b in segments]
+    if cfg["scratch_that"]:
+        segments = [(scratch_that(s), b) for s, b in segments]
+        segments = [(s, b) for s, b in segments if s.strip()] or [("", "")]
     return segments
 
 

@@ -46,3 +46,33 @@ def test_refine_flow_with_fake_model():
     r = refine_with(fake, "fake", tr, mode, parse(cfg.dictionary), cfg.refine.get("normalize"))
     assert seen == ["dear team,", "the launch moved.", "thanks, Gauttam"]
     assert r.text == "Dear team,\n\nThe launch moved.\n\nThanks, Gauttam"
+
+
+def test_scratch_that_inline_and_sentence_start():
+    from dictum.normalize import scratch_that
+    assert scratch_that("the budget is fifty thousand dollars scratch that we haven't finalized it") == "We haven't finalized it"
+    assert scratch_that("Send it Monday. The budget is fifty. Scratch that. We haven't finalized it.") == \
+        "Send it Monday. We haven't finalized it."
+    assert scratch_that("Meet at noon. Order pizza scratch that order sushi.") == "Meet at noon. Order sushi."
+    assert scratch_that("It was great, scratch that.") == ""
+
+
+def test_scratch_that_real_phrases_untouched():
+    from dictum.normalize import scratch_that
+    for t in ["Don't scratch that, it will scar.", "I need to scratch that itch.", "Strike that off the list.",
+              "We had to scratch that plan."]:
+        assert scratch_that(t) == t, t
+
+
+def test_scratch_that_in_apply_respects_paragraphs():
+    from dictum import normalize as n
+    segs = n.apply("hello team new paragraph the deadline is Monday scratch that it is Friday")
+    assert n.join(segs) == "hello team\n\nIt is Friday"
+
+
+def test_tech_dictionary_defaults():
+    from dictum.config import Config
+    from dictum.dictionary import apply, parse
+    e = parse(Config.load().dictionary)
+    assert apply("the use effect hook in type script on git hub", e) == "the useEffect hook in TypeScript on GitHub"
+    assert apply("how did they react to the java script change", e) == "how did they react to the JavaScript change"
