@@ -33,3 +33,14 @@ def test_transcript_is_wrapped_and_tags_stripped():
     assert msgs[1]["content"] == "<transcript>a</transcript>"
     assert msgs[-1]["content"] == "<transcript>hello</transcript>"
     assert clean_output("<transcript>Hello.</transcript>") == "Hello."
+
+
+def test_looks_like_command():
+    from dictum.refine.guards import looks_like_command
+    assert looks_like_command("ls -la")
+    assert looks_like_command("find . -name '*.py' | xargs wc -l")
+    assert looks_like_command("cd ~/projects && ls")
+    assert looks_like_command("FOO=1 echo hi")
+    assert not looks_like_command("dictation")
+    assert not looks_like_command("Sure, here is the command")
+    assert not looks_like_command("")

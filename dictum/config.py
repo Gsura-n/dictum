@@ -33,6 +33,10 @@ class Mode:
     vars: dict = field(default_factory=dict)       # {name} placeholders substituted into prompt
     dictionary_hint: bool = True                   # append dictionary words to the prompt
     backend: str | None = None                     # with refine.backend: auto, which engine serves this mode
+    chunk_words: int = 0                           # >0: refine long text in chunks of about this many words
+    max_input_words: int = 0                       # >0: longer transcripts are handed to fallback_mode
+    fallback_mode: str | None = None
+    pre_mode: str | None = None                    # run this mode first and refine its output (cleanup levels stack)
 
 
 @dataclass
@@ -85,4 +89,6 @@ class Config:
         return Mode(name=name, description=m.get("description", ""), prompt=m.get("prompt", ""),
                     model=m.get("model"), examples=list(m.get("examples") or []),
                     guard=dict(m.get("guard") or {}), vars=dict(m.get("vars") or {}),
-                    dictionary_hint=bool(m.get("dictionary_hint", True)), backend=m.get("backend"))
+                    dictionary_hint=bool(m.get("dictionary_hint", True)), backend=m.get("backend"),
+                    chunk_words=int(m.get("chunk_words", 0)), max_input_words=int(m.get("max_input_words", 0)),
+                    fallback_mode=m.get("fallback_mode"), pre_mode=m.get("pre_mode"))

@@ -368,6 +368,8 @@ def run_eval(cfg: Config, modes: list[str] | None, models: list[str] | None, rep
             mode = replace(base, model=model, vars={**base.vars, **SUITE_VARS.get(suite, {})})
             with console.status(f"warming {model} for {mode_name}..."):
                 refiner.warm_up(mode)
+                if mode.pre_mode:
+                    refiner.warm_up(cfg.mode(mode.pre_mode))
             t_start = time.perf_counter()
             for i, case in enumerate(mode_cases, 1):
                 for r in range(repeat):
@@ -388,7 +390,11 @@ def run_eval(cfg: Config, modes: list[str] | None, models: list[str] | None, rep
                     refiner.entries = dict_mod.parse(case.dictionary) if case.dictionary is not None else default_entries
                     notes = []
                     try:
-                        res = refiner.refine(tr, mode)
+                        if mode.pre_mode:
+                            from .refine.common import refine_levels
+                            res = refine_levels(refiner, cfg, tr, mode)
+                        else:
+                            res = refiner.refine(tr, mode)
                         out, lat, err, notes = res.text, res.latency_s, None, res.notes
                     except Exception as e:
                         out, lat, err = "", 0.0, f"{type(e).__name__}: {e}"

@@ -101,6 +101,76 @@ def collapse_repeats(text: str) -> str:
     return re.sub(r"\b(\w+)(?:,?\s+\1\b)+", rep, text, flags=re.IGNORECASE)
 
 
+_PREP = {"in", "on", "at", "by", "for", "from", "to", "with", "of", "into", "onto",
+         "after", "before", "during", "until", "since", "about", "over", "under"}
+_DET = {"the", "a", "an", "this", "that", "these", "those", "my", "our", "your", "his", "her", "their"}
+_WORD = re.compile(r"[A-Za-z0-9']+")
+_HARD_STOP = re.compile(r"[.?!;]")
+
+
+def _tokens(text: str) -> list[tuple[str, int, int]]:
+    return [(m.group(0), m.start(), m.end()) for m in _WORD.finditer(text)]
+
+
+def _is_subsequence(needle: list[str], hay: list[str]) -> bool:
+    it = iter(hay)
+    return all(any(w == h for h in it) for w in needle)
+
+
+def collapse_restarts(text: str, max_span: int = 6, slack: int = 4) -> str:
+    """Drop an abandoned false start when the speaker starts the phrase again.
+
+    "how would be how I would be able" -> "how I would be able"
+    "I went to the store I went to the market" -> "I went to the market"
+
+    A span is only dropped when the speaker clearly restarted it: the span and
+    the words that follow begin with the same word, and every word of the span
+    reappears, in order, in the words that follow. That last test is what keeps
+    ordinary English intact - "the cat sat on the mat" repeats "the" but does
+    not repeat "cat sat on", so nothing is dropped.
+    """
+    for _ in range(10):                      # a long take can hold several
+        toks = _tokens(text)
+        words = [t[0].lower() for t in toks]
+        cut, blocked = None, []
+        for i in range(len(words)):
+            if any(a <= i < b for a, b in blocked):
+                continue                     # inside a span we already cleared
+            for j in range(i + 2, min(i + max_span + 1, len(words))):
+                if words[i] != words[j]:
+                    continue
+                span = words[i:j]
+                if _HARD_STOP.search(text[toks[i][1]:toks[j][1]]):
+                    break                    # never reach across a sentence end
+                window = words[j:j + len(span) + slack]
+                if len(window) < len(span) or not _is_subsequence(span, window):
+                    continue
+                if words[j:j + len(span)] == span and i and words[i - 1] in _PREP and span[0] in _DET:
+                    blocked.append((i, j))   # "in the end | the end justifies" is English
+                    break
+                cut = (toks[i][1], toks[j][1])
+                break
+            if cut:
+                break
+        if not cut:
+            return text
+        text = (text[:cut[0]] + text[cut[1]:]).strip()
+    return text
+
+
+# "better and better and better and better" -> "better and better".
+# Three or more copies is emphasis that reads as a stutter in writing; two keeps
+# the idiom. One to three words per copy so "salt and pepper and salt and
+# pepper and salt and pepper" also settles down.
+_PHRASE_RUN = re.compile(r"\b(\w+(?:\s+\w+){0,2})((?:\s+(and|or)\s+\1\b){2,})", re.IGNORECASE)
+
+
+def reduce_phrase_repeats(text: str) -> str:
+    def rep(m: re.Match) -> str:
+        return f"{m.group(1)} {m.group(3)} {m.group(1)}"
+    return _PHRASE_RUN.sub(rep, text)
+
+
 # "scratch that" / "strike that" as an editing command. Not when it is a real
 # verb phrase: "don't scratch that", "scratch that itch", "strike that off the list".
 _SCRATCH = re.compile(
@@ -151,11 +221,15 @@ def split_breaks(text: str) -> list[tuple[str, str]]:
 
 def apply(text: str, cfg: dict | None = None) -> list[tuple[str, str]]:
     cfg = {"spoken_punctuation": True, "spoken_addresses": True, "repeated_words": True,
-           "scratch_that": True, **(cfg or {})}
+           "scratch_that": True, "restarts": True, "phrase_repeats": True, **(cfg or {})}
     if cfg["spoken_addresses"]:
         text = spoken_addresses(text)
     if cfg["repeated_words"]:
         text = collapse_repeats(text)
+    if cfg["restarts"]:
+        text = collapse_restarts(text)
+    if cfg["phrase_repeats"]:
+        text = reduce_phrase_repeats(text)
     segments = split_breaks(text) if cfg["spoken_punctuation"] else [(text, "")]
     if cfg["spoken_punctuation"]:
         segments = [(spoken_punctuation(s), b) for s, b in segments]
@@ -167,3 +241,74 @@ def apply(text: str, cfg: dict | None = None) -> list[tuple[str, str]]:
 
 def join(segments: list[tuple[str, str]]) -> str:
     return "".join(s + b for s, b in segments).strip()
+
+
+_SENT = re.compile(r"(?<=[.?!])\s+")
+_CORRECTION_START = re.compile(r"^(no|not|nope|actually|sorry|wait|i mean|i meant|or rather|rather|make that|"
+                               r"scratch that|strike that|oops|instead)\b", re.IGNORECASE)
+
+
+_CLAUSE_START = re.compile(
+    r"\s+(?=(?:and so|and also|and then|and of course|but|so|because|also|of course|let's say|"
+    r"i'm also|i am also|and i'm|and i|and the|and when|and if|then|which|anyway)\b)",
+    re.IGNORECASE)
+
+
+def _split_run_on(sentence: str, max_words: int) -> list[str]:
+    """Split one over-long sentence at clause starters ("and I'm also", "so",
+    "because"), aiming for pieces between half and the full max size. Falls
+    back to a hard split at max_words if no clause starter is found."""
+    words = sentence.split()
+    if len(words) <= max_words:
+        return [sentence]
+    pieces, rest = [], sentence
+    while len(rest.split()) > int(max_words * 1.3):
+        cut = None
+        for m in _CLAUSE_START.finditer(rest):
+            n_before = len(rest[:m.start()].split())
+            if max_words // 2 <= n_before <= max_words:
+                cut = m.start()                  # last clause start within the target size
+            elif cut is None and max_words < n_before <= int(max_words * 1.3):
+                cut = m.start()                  # slight overshoot beats splitting mid-phrase
+                break
+        if cut is None:
+            w = rest.split()
+            cut = len(" ".join(w[:max_words]))
+        else:
+            # never strand the start of a clause: "... and I'm | also" -> "... | and I'm also"
+            while True:
+                head = rest[:cut].rstrip()
+                last = head.rsplit(" ", 1)[-1].lower().strip(",")
+                if last in {"and", "i'm", "i", "am", "we", "we're", "so"} and len(head.split()) > max_words // 2:
+                    cut = len(head) - len(head.rsplit(" ", 1)[-1])
+                else:
+                    break
+        pieces.append(rest[:cut].strip())
+        rest = rest[cut:].strip()
+    if rest:
+        pieces.append(rest)
+    return pieces
+
+
+def chunk(text: str, max_words: int) -> list[str]:
+    """Split long text into chunks of about max_words at sentence boundaries.
+
+    A sentence that starts with a correction ("No, not Monday.") is never
+    separated from the sentence before it, since the correction refers back to it.
+    """
+    if max_words <= 0 or len(text.split()) <= max_words:
+        return [text]
+    sentences = [x for x in _SENT.split(text.strip()) if x]
+    # Long unpunctuated speech (the STT often emits none for a continuous
+    # monologue): break run-on "sentences" at clause starters instead.
+    sentences = [piece for sent in sentences for piece in _split_run_on(sent, max_words)]
+    chunks: list[list[str]] = []
+    for sent in sentences:
+        n_cur = sum(len(x.split()) for x in chunks[-1]) if chunks else 0
+        glue = bool(chunks) and bool(_CORRECTION_START.match(sent))
+        if chunks and (glue or n_cur + len(sent.split()) <= max_words):
+            chunks[-1].append(sent)
+        else:
+            chunks.append([sent])
+    # a correction glued onto a full chunk may pull the next sentence too; fine
+    return [" ".join(c) for c in chunks]

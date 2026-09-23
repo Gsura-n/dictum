@@ -47,58 +47,79 @@ class DictumApp:
             subprocess.Popen(["afplay", SOUNDS[name]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # -- hotkey callbacks (tap thread: must be instant) -----------------------
+    # Each event carries the time the key actually moved. The recorder can be
+    # busy for a while opening the mic (Bluetooth headsets take 1-2 s to switch
+    # into headset mode), so "how long was the key held" must come from these
+    # timestamps, not from when the recorder got around to each event.
     def _on_down(self, mode: str) -> None:
-        self._events.put(("down", mode))
+        self._events.put(("down", (mode, time.perf_counter())))
 
     def _on_up(self) -> None:
-        self._events.put(("up", None))
+        self._events.put(("up", time.perf_counter()))
 
     def _on_cancel(self) -> None:
-        self._events.put(("cancel", None))
+        self._events.put(("cancel", time.perf_counter()))
 
     # -- recorder thread -----------------------------------------------------
     def _recorder(self) -> None:
-        mode, t_start = None, 0.0
+        mode, key_down_t, mic_open_s = None, 0.0, 0.0
         cap = self.pipe.capture
         while True:
             kind, arg = self._events.get()
             if kind == "down" and mode is None:
+                requested, key_down_t = arg
                 # Resolve the mode at press time: the app in front now is the
                 # one the text will be pasted into.
                 app = frontmost_app()
-                resolved = mode_for_app(app, self.cfg.raw.get("apps", {}), self.cfg.mode_names) if arg == "auto" else arg
+                resolved = (mode_for_app(app, self.cfg.raw.get("apps", {}), self.cfg.mode_names)
+                            if requested == "auto" else requested)
                 try:
                     cap.start()
                 except Exception as e:
                     self.console.print(f"[red]mic error:[/] {e}")
                     continue
-                mode, t_start = resolved, time.perf_counter()
+                mic_open_s = time.perf_counter() - key_down_t
+                mode = resolved
                 self._sound("start")
                 where = f" in {app.name}" if app else ""
-                self.console.print(f"[cyan]● recording[/] [dim]({mode}{where})[/]")
+                slow = f", mic took {mic_open_s:.1f}s to open" if mic_open_s > 0.3 else ""
+                self.console.print(f"[cyan]● recording[/] [dim]({mode}{where}{slow})[/]")
             elif kind in ("up", "cancel") and mode is not None:
                 clip = cap.stop()
-                held = time.perf_counter() - t_start
+                held = arg - key_down_t              # real key hold time
                 m, mode = mode, None
                 if kind == "cancel":
                     self._sound("cancel")
                     self.console.print("[yellow]cancelled[/] [dim](another key pressed)[/]")
                 elif held < self.min_hold_s:
-                    self.console.print("[dim]tap ignored (hold the key to dictate)[/]")
+                    self.console.print(f"[dim]tap ignored ({held:.2f}s; hold the key to dictate)[/]")
+                elif clip.duration_s < 0.3:
+                    self._sound("cancel")
+                    self.console.print(f"[yellow]no audio captured[/] [dim](key held {held:.1f}s but the mic took "
+                                       f"{mic_open_s:.1f}s to open; wait for the start sound before speaking)[/]")
                 elif clip.is_silent:
                     self._sound("cancel")
                     self.console.print(f"[red]silent clip[/] [dim]rms {clip.rms:.5f}; check the mic[/]")
                 else:
+                    if mic_open_s > 0.5:
+                        self.console.print(f"[dim]  note: mic opened {mic_open_s:.1f}s after the key; "
+                                           "words spoken before the start sound were not captured[/]")
                     self._sound("stop")
                     self._clips.put((clip, m))
 
     # -- processor thread ----------------------------------------------------
     def _processor(self) -> None:
         try:
-            modes = {b.mode for b in self.bindings if b.mode != "auto"}
-            if any(b.mode == "auto" for b in self.bindings):
-                apps = self.cfg.raw.get("apps", {})
-                modes |= {apps.get("default", "dictation")} | {r["mode"] for r in apps.get("rules", [])}
+            # Warm only what is used constantly. Every warmed model stays in memory,
+            # and on a 16 GB Mac warming all of them (speech model + 3B + qwen 7B +
+            # llama 8B for academic) pushes the system into swap and makes every
+            # dictation take seconds. Other modes load on first use.
+            warm = self.cfg.raw.get("hotkeys", {}).get("warm_modes")
+            if warm is None:
+                warm = {b.mode for b in self.bindings if b.mode != "auto"}
+                if any(b.mode == "auto" for b in self.bindings):
+                    warm.add(self.cfg.raw.get("apps", {}).get("default", "dictation"))
+            modes = set(warm)
             modes = sorted(modes)
             load = self.pipe.warm_up(modes=modes)
             self.console.print(f"[dim]models loaded: stt {load['stt']:.1f}s, refine {load['refine']:.1f}s[/]")

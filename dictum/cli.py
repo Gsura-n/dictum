@@ -172,25 +172,45 @@ def listen(
 
 @app.command()
 def refine(
-    text: str = typer.Argument(..., help="Raw text to refine, as if it came from the STT stage"),
+    text: str = typer.Argument("", help="Raw text to refine, as if it came from the STT stage"),
     mode: str = MODE_OPT,
     all_modes: bool = typer.Option(False, "--all", help="Run every mode and compare"),
+    levels: bool = typer.Option(False, "--levels", help="Compare the dictation cleanup levels side by side"),
+    file: Path = typer.Option(None, "--file", "-f", help="Read the transcript from a file instead (no shell quoting)"),
 ):
     """Refine typed text without the microphone. Handy for iterating on prompts."""
+    from .refine.common import refine_levels
     from .refine import create_refiner
     from .types import Transcript
 
+    if file:
+        text = Path(file).read_text().strip()
+    if not text:
+        raise typer.BadParameter("give a transcript as an argument or with --file")
     cfg = Config.load()
     refiner = create_refiner(cfg.refine, cfg.dictionary)
     tr = Transcript(text=text, engine="typed", latency_s=0.0, audio_s=0.0)
-    names = cfg.mode_names if all_modes else [cfg.mode(mode).name]
+    if all_modes:
+        names = cfg.mode_names
+    elif levels:
+        names = [n for n in ("dictation_ft", "edit") if n in cfg.mode_names]
+    else:
+        names = [cfg.mode(mode).name]
+    console.rule(f"raw  [dim]{len(text.split())} words[/]")
+    console.print(f"[dim]{text}[/]")
     for name in names:
         m = cfg.mode(name)
         warm = refiner.warm_up(m)
-        r = refiner.refine(tr, m)
+        if m.pre_mode:
+            warm += refiner.warm_up(cfg.mode(m.pre_mode))
+            r = refine_levels(refiner, cfg, tr, m)
+        else:
+            r = refiner.refine(tr, m)
         console.rule(f"{name}  [dim]{getattr(refiner, 'model_for', lambda _: '')(m)}  "
-                     f"warm {warm:.1f}s  refine {r.latency_s:.2f}s[/]")
+                     f"warm {warm:.1f}s  refine {r.latency_s:.2f}s  {len(r.text.split())} words[/]")
         console.print(r.text)
+        if r.notes:
+            console.print(f"[dim]{'; '.join(r.notes)}[/]")
 
 
 @app.command("eval")

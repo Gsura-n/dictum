@@ -29,3 +29,25 @@ def check(guard: dict, source: str, output: str) -> tuple[str, str | None]:
     if "min_ratio" in guard and n_in >= 6 and n_out < guard["min_ratio"] * n_in:
         return source, f"output too short ({n_out} vs {n_in} words)"
     return out, None
+
+
+_SHELL_WORDS = {"cd", "export", "alias", "source", "echo", "printf", "set", "unset", "for", "while", "if", "time",
+                "sudo", "exec", "eval", "history", "pushd", "popd", "ulimit", "umask", "type", "which", "(", "{", "!"}
+
+
+def looks_like_command(text: str) -> bool:
+    """True when the first word is something a shell can run: a builtin, an
+    executable on PATH, or a path. Catches command mode answering in prose
+    ("dictation", "Sure, here is...")."""
+    import os
+    import re
+    import shutil
+    t = text.strip()
+    if not t or "\n" in t:
+        return False
+    first = re.split(r"[\s;|&]", re.sub(r"^\w+=\S*\s+", "", t), maxsplit=1)[0]
+    if not first:
+        return False
+    if first in _SHELL_WORDS or first.startswith(("./", "/", "~/")):
+        return True
+    return shutil.which(first) is not None or os.path.exists(os.path.expanduser(first))

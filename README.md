@@ -8,7 +8,7 @@ Think of it as an open source take on tools like Wispr Flow, with two difference
 
 Phase 3 of 4. What works today:
 
-- Hold Right Option anywhere on your Mac, talk, release: cleaned text is pasted into whatever app has focus. Right Command does the same in command mode. Your clipboard is restored afterwards
+- Hold Right Option anywhere on your Mac, talk, release: cleaned text is pasted into whatever app has focus. Right Command always uses plain dictation. Right Control adds a copy-edit pass that breaks long speech into sentences and paragraphs, for when you are writing rather than noting. Your clipboard is restored afterwards
 - A terminal push-to-talk mode (`dictum listen`) for testing each stage
 - Speech to text with a pluggable engine layer: NVIDIA Parakeet TDT (default) or Whisper, both via MLX
 - LLM cleanup through Ollama, with modes: dictation (filler removal, self-corrections, punctuation), command (speech to one shell command, never executed), academic (APA style prose). Each mode has its own prompt, few-shot examples and optionally its own model

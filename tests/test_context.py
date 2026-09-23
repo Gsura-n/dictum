@@ -9,10 +9,10 @@ def test_app_rules_pick_mode_by_bundle_or_name():
     cfg = Config.load()
     apps = cfg.raw["apps"]
     assert mode_for_app(AppInfo("com.apple.Terminal", "Terminal"), apps, cfg.mode_names) == "command"
-    assert mode_for_app(AppInfo("x.y", "iTerm2"), apps, cfg.mode_names) == "dictation"
+    assert mode_for_app(AppInfo("x.y", "iTerm2"), apps, cfg.mode_names) == "dictation_ft"
     assert mode_for_app(AppInfo("com.microsoft.Word", "Microsoft Word"), apps, cfg.mode_names) == "academic"
-    assert mode_for_app(AppInfo("com.tinyspeck.slackmacgap", "Slack"), apps, cfg.mode_names) == "dictation"
-    assert mode_for_app(None, apps, cfg.mode_names) == "dictation"
+    assert mode_for_app(AppInfo("com.tinyspeck.slackmacgap", "Slack"), apps, cfg.mode_names) == "dictation_ft"
+    assert mode_for_app(None, apps, cfg.mode_names) == "dictation_ft"
 
 
 def test_match_by_name():
@@ -28,4 +28,4 @@ def test_unknown_mode_rejected():
 def test_auto_binding_allowed():
     cfg = Config.load()
     b = resolve_bindings(cfg.raw["hotkeys"]["hold"], cfg.mode_names)
-    assert {x.mode for x in b} == {"auto", "dictation"}
+    assert {x.mode for x in b} == {"auto", "dictation_ft", "edit"}

@@ -8,6 +8,7 @@ from .capture import AudioCapture, SoundDeviceCapture
 from .config import Config
 from .inject import Injector, create_injector
 from .refine import Refiner, create_refiner
+from .refine.common import refine_levels
 from .stt import STTEngine, create_engine
 from .types import AudioClip, Refined, Transcript
 
@@ -84,4 +85,22 @@ class Pipeline:
         return refined, Timing(clip.duration_s, transcript.latency_s, refined.latency_s, total)
 
     def refine_text(self, transcript: Transcript, mode_name: str | None = None) -> Refined:
-        return self.refiner.refine(transcript, self.cfg.mode(mode_name))
+        mode = self.cfg.mode(mode_name)
+        n = len(transcript.text.split())
+        if mode.max_input_words and n > mode.max_input_words and mode.fallback_mode:
+            # e.g. a long ramble in a terminal is dictation, not a shell command
+            refined = self.refiner.refine(transcript, self.cfg.mode(mode.fallback_mode))
+            refined.notes.insert(0, f"{n} words is too long for {mode.name}; used {mode.fallback_mode}")
+            return refined
+        if mode.pre_mode:
+            return refine_levels(self.refiner, self.cfg, transcript, mode)
+        refined = self.refiner.refine(transcript, mode)
+        if mode.name.startswith("command") and mode.fallback_mode:
+            from .refine.guards import looks_like_command
+            if not looks_like_command(refined.text):
+                # The model answered in words instead of producing a command, so this
+                # was probably dictation. Paste cleaned text rather than a bogus command.
+                fb = self.refiner.refine(transcript, self.cfg.mode(mode.fallback_mode))
+                fb.notes.insert(0, f"'{refined.text[:40]}' is not a runnable command; used {mode.fallback_mode}")
+                return fb
+        return refined

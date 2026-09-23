@@ -1,3 +1,5 @@
+import pytest
+
 from dictum import normalize as n
 
 
@@ -76,3 +78,87 @@ def test_tech_dictionary_defaults():
     e = parse(Config.load().dictionary)
     assert apply("the use effect hook in type script on git hub", e) == "the useEffect hook in TypeScript on GitHub"
     assert apply("how did they react to the java script change", e) == "how did they react to the JavaScript change"
+
+
+def test_chunk_keeps_corrections_with_their_sentence():
+    from dictum.normalize import chunk
+    t = ("I have a lot going on this week with several projects. So there is a deadline that I have to meet by Monday. "
+         "No, not actually Monday. Thursday next week. Let's make a note of it as well.")
+    parts = chunk(t, 12)
+    joined = [p for p in parts if "Monday" in p]
+    assert len(joined) == 1 and "No, not actually Monday." in joined[0]
+    assert " ".join(parts) == t
+    assert chunk("short text here", 60) == ["short text here"]
+
+
+def test_command_mode_falls_back_for_long_input():
+    import pytest
+    try:
+        import sounddevice  # noqa: F401  (pipeline imports the mic layer)
+    except (ImportError, OSError):
+        pytest.skip("sounddevice/PortAudio not available")
+    from dictum.config import Config
+    from dictum.pipeline import Pipeline
+    from dictum.types import Refined, Transcript
+
+    class FakeRefiner:
+        name = "fake"
+        def refine(self, t, mode):
+            return Refined(text=mode.name, backend="fake", mode=mode.name, latency_s=0, source=t)
+
+    cfg = Config.load()
+    p = Pipeline(capture=None, stt=None, refiner=FakeRefiner(), injector=None, cfg=cfg)
+    long_t = Transcript(text=" ".join(["word"] * 50), engine="x", latency_s=0, audio_s=0)
+    short_t = Transcript(text="list all python files here", engine="x", latency_s=0, audio_s=0)
+    r = p.refine_text(long_t, "command")
+    assert r.mode == "dictation_ft" and "too long" in r.notes[0]
+    assert p.refine_text(short_t, "command").mode == "command"
+
+
+def test_chunk_splits_unpunctuated_monologue_at_clauses():
+    from dictum.normalize import chunk
+    t = ("So there might be multiple things that we are looking into and there are also multiple projects that I'm "
+         "working on I'm also trying to understand how I be able to refine this and make it better and better and "
+         "better and I'm also trying to understand how will I be able to train it in such a way that it works "
+         "perfectly it works as expected and also the most important thing here I think is that how would we able "
+         "to transfer all this training and refinements in such a way that when this is adopted by a different "
+         "system let's say if I move the same project to a different device I don't have to do all the trainings")
+    parts = chunk(t, 60)
+    assert len(parts) >= 2
+    assert all(len(p.split()) <= 78 for p in parts)
+    assert " ".join(parts).split() == t.split()           # no words lost or added
+    assert all(len(p.split()) >= 15 for p in parts[:-1])  # no tiny fragments
+
+
+@pytest.mark.parametrize("raw,want", [
+    # false start: the speaker begins the phrase again, more completely
+    ("how would be how I would be able to do this", "how I would be able to do this"),
+    ("and I want to I want to try this again", "and I want to try this again"),
+    ("I think I think we should ship it", "I think we should ship it"),
+    ("give me the red one the red one please", "give me the red one please"),
+    # left alone: ordinary English that happens to repeat a word
+    ("the cat sat on the mat", "the cat sat on the mat"),
+    ("the more you practice the more you improve", "the more you practice the more you improve"),
+    ("in the end the end justifies the means", "in the end the end justifies the means"),
+    ("at the end of the day the day is short", "at the end of the day the day is short"),
+    ("it's not just a car it's a spaceship", "it's not just a car it's a spaceship"),
+    # a substitution repair is the model's job, not a rule's
+    ("I went to the store I went to the market", "I went to the store I went to the market"),
+    # never across a sentence end
+    ("She said that. That was the plan.", "She said that. That was the plan."),
+])
+def test_collapse_restarts(raw, want):
+    assert n.collapse_restarts(raw) == want
+
+
+@pytest.mark.parametrize("raw,want", [
+    ("we can make this better and better and better and better", "we can make this better and better"),
+    ("it goes on and on and on", "it goes on and on"),
+    ("again and again and again and again", "again and again"),
+    # two copies is the idiom, not a stutter
+    ("it goes on and on", "it goes on and on"),
+    ("tea or coffee or juice", "tea or coffee or juice"),
+    ("salt and pepper and olive oil", "salt and pepper and olive oil"),
+])
+def test_reduce_phrase_repeats(raw, want):
+    assert n.reduce_phrase_repeats(raw) == want

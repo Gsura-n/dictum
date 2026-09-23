@@ -22,3 +22,28 @@ def test_modes_have_examples_and_model_overrides():
     assert cfg.mode("dictation").examples
     assert cfg.mode("dictation").model is None       # uses default
     assert cfg.mode("command").model                 # overrides
+
+
+def test_refine_levels_stacks_modes():
+    """`edit` runs `dictation_ft` first and refines its output; notes keep both stages."""
+    from dictum.config import Config
+    from dictum.refine.common import refine_levels
+    from dictum.types import Refined, Transcript
+
+    seen = []
+
+    class FakeRefiner:
+        def refine(self, transcript, mode):
+            seen.append((mode.name, transcript.text))
+            return Refined(text=f"<{mode.name}>{transcript.text}", backend="fake", mode=mode.name,
+                           latency_s=1.0, source=transcript, notes=[f"{mode.name} note"])
+
+    cfg = Config.load()
+    tr = Transcript(text="raw speech", engine="eval", latency_s=0.0, audio_s=0.0)
+    out = refine_levels(FakeRefiner(), cfg, tr, cfg.mode("edit"))
+
+    assert [m for m, _ in seen] == ["dictation_ft", "edit"]
+    assert seen[1][1] == "<dictation_ft>raw speech"      # stage two sees stage one's output
+    assert out.source is tr                              # ...but the raw transcript is still the source
+    assert out.latency_s == 2.0
+    assert out.notes == ["dictation_ft: dictation_ft note", "edit note"]
