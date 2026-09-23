@@ -147,8 +147,13 @@ def main() -> None:
 
     clips = utterances(a.seconds, a.n)
     mem0 = memory()
-    pipe = Pipeline.from_config(cfg, inject="stdout")
-    pipe.injector = NullInjector()
+    # Built by hand rather than with Pipeline.from_config: that opens the mic,
+    # and this script feeds recorded audio, so it must run with no input device.
+    from dictum.refine import create_refiner
+    from dictum.stt import create_engine
+    name, ecfg = cfg.stt_engine_config(None)
+    pipe = Pipeline(capture=None, stt=create_engine(name, **ecfg),
+                    refiner=create_refiner(cfg.refine, cfg.dictionary), injector=NullInjector(), cfg=cfg)
     t0 = time.perf_counter()
     load = pipe.warm_up(modes=list(warm))
     load_s = time.perf_counter() - t0
