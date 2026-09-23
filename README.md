@@ -61,7 +61,15 @@ dictum eval --suite nl2bash --split test     # 300 programmer-written command de
 dictum eval --suite targeted                 # 30 hand-written regression cases
 ```
 
-Results on the human-authored test splits: *pending first run.*
+Results on the held-out test splits for the default dictation mode (`dictation_ft`: Llama 3.2 3B 4-bit plus the fine-tuned LoRA adapter), measured on an M4 Mac mini on 2026-09-16, before the chunking change in 6574194 (a rerun on current code is pending). Each number links to the saved result file with every case in it.
+
+| suite | cases | pass rate (95% CI) | refine p50 / p95 |
+|---|---|---|---|
+| [Disfl-QA test](evals/reported/20260916-231606-disflqa-test.json) | 500 | 73% (69 to 77) | 0.61 s / 0.85 s |
+| [DisfluencySpeech test, transcripts](evals/reported/20260916-223253-disflspeech-test.json) | 250 | 92% (88 to 95) | 0.90 s / 1.21 s |
+| [DisfluencySpeech test, from audio](evals/reported/20260916-215554-disflspeech-test-audio.json) | 250 | 71% (65 to 76) | 0.88 s / 1.19 s |
+
+The audio row runs the recordings through Parakeet first, so speech recognition errors count against it. Latency is the refine stage only; end-to-end latency on the minimum supported hardware is not measured yet. The test splits were not used for tuning.
 
 Early results on the 30 hand-written targeted cases (written with an AI assistant, used for regression, not for headline claims):
 
@@ -75,16 +83,18 @@ What moved those numbers was mostly not the model: delimiting the transcript so 
 
 ## Personalization (optional, local)
 
-Dictum ships with a fine-tuned dictation adapter, downloaded once on first use; nobody needs to train anything to use it. If you want it to learn your own vocabulary and phrasing:
+The default dictation mode (`dictation_ft`) uses a LoRA adapter fine-tuned on Llama 3.2 3B. **The adapter is not published yet.** Until it is, a fresh clone falls back to the base 3B model, which is much weaker at cleanup (4% on Disfl-QA dev against 76% with the adapter). In the meantime, train it with `scripts/finetune/train.sh`, or set `apps.default: dictation` and `right_command: dictation` in `config/local.yaml` to use the prompted Ollama model instead.
+
+Once you have an adapter, you can teach it your own vocabulary and phrasing:
 
 ```bash
 dictum history                  # after setting history.enabled: true in config/local.yaml
 dictum correct --text "what it should have been"    # or --ok when the output was right
-dictum personalize              # after 50+ corrections: trains on top of the shipped adapter
-dictum personalize --reset      # back to the shipped adapter
+dictum personalize              # after 50+ corrections: trains on top of the current adapter
+dictum personalize --reset      # back to the base adapter
 ```
 
-Personalization continues training from the shipped adapter on your corrections mixed with general examples, scores old vs new on a held-out slice of your own corrections, and only switches if the new one is at least as good. History and adapters live in `~/.dictum/` and never leave the machine.
+Personalization continues training from the current adapter on your corrections mixed with general examples, scores old vs new on a held-out slice of your own corrections, and only switches if the new one is at least as good. History and adapters live in `~/.dictum/` and never leave the machine.
 
 ## Configuration
 

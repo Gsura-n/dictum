@@ -37,3 +37,6 @@ dictum = "dictum.cli:app"
 
 [tool.setuptools.packages.find]
 include = ["dictum*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
