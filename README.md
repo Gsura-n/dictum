@@ -19,6 +19,8 @@ Coming next (phase 4): app-aware mode selection, a self-improving dictionary lea
 
 ## Quick start (Apple Silicon)
 
+Built, tuned and measured on one machine: an M4 Mac mini with 16 GB. Other Apple Silicon Macs may work, but nothing here is tested on them.
+
 ```bash
 git clone <repo> dictum && cd dictum
 ./scripts/setup.sh
@@ -69,7 +71,7 @@ Results on the held-out test splits for the default dictation mode (`dictation_f
 | [DisfluencySpeech test, transcripts](evals/reported/20260916-223253-disflspeech-test.json) | 250 | 92% (88 to 95) | 0.90 s / 1.21 s |
 | [DisfluencySpeech test, from audio](evals/reported/20260916-215554-disflspeech-test-audio.json) | 250 | 71% (65 to 76) | 0.88 s / 1.19 s |
 
-The audio row runs the recordings through Parakeet first, so speech recognition errors count against it. Latency in that table is the refine stage only.
+The test splits were not used for tuning. The audio row runs the recordings through Parakeet first, so speech recognition errors count against it. Latency in that table is the refine stage only.
 
 End to end, on the same M4 Mac mini with 16 GB and the usual apps open, over 40 utterances of about 10 s of recorded human speech ([result file](evals/reported/baseline-20260923-150648.json), `scripts/measure_baseline.py`):
 
@@ -79,7 +81,7 @@ End to end, on the same M4 Mac mini with 16 GB and the usual apps open, over 40 
 | cleanup (3B + adapter) | 1.19 s | 1.55 s |
 | total after key release, before the paste | 1.43 s | 1.82 s |
 
-Memory with the default hotkeys loaded: 3.6 GB. The latency target is 1.0 s p50 on an M1, so this does not meet it yet. Cleanup time grows with the length of what was said (about 43 ms per output word), which is the next thing to fix. The test splits were not used for tuning.
+Memory with the default hotkeys loaded: 3.6 GB. The target on this machine is 1.0 s p50 and 1.8 s p95, so this does not meet it yet. Cleanup time grows with the length of what was said (about 43 ms per output word), which is the next thing to fix.
 
 Early results on the 30 hand-written targeted cases (written with an AI assistant, used for regression, not for headline claims):
 
