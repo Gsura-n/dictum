@@ -1,5 +1,8 @@
 name: tests
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [master]
@@ -11,10 +14,18 @@ jobs:
     # Anything that needs MLX, Quartz or PortAudio skips itself on Linux.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install ".[dev,refine]"
-      - run: pytest -q
+      - name: Install and test
+        # Editable install, like scripts/setup.sh: config/ and evals/ are read from the source tree
+        run: |
+          set -o pipefail
+          { pip install -e ".[dev,refine]" && pytest -q -rfE; } 2>&1 | tee /tmp/ci.log
+      - name: Report failure output
+        # Puts the end of the log in an annotation so it shows on the PR and in the checks API
+        if: failure()
+        run: |
+          tail -n 60 /tmp/ci.log | python3 -c "import sys; t=sys.stdin.read().replace('%','%25').replace('\r','%0D').replace('\n','%0A'); print('::error title=install and test output::' + t)"

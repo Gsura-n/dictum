@@ -1,0 +1,28 @@
+# Golden Rules pre-commit gates. Install once per clone:
+#   pip install pre-commit && pre-commit install
+# Revs are frozen to commit SHAs (SUP-005). Bump with: pre-commit autoupdate --freeze
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # frozen: v8.30.1
+    hooks:
+      - id: gitleaks  # SEC-006
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: detect-private-key  # SEC-006
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: golden-hidden-unicode  # AGT-004
+        name: hidden Unicode in agent instruction files
+        entry: python3 scripts/golden/check_pr.py unicode
+        language: system
+        files: (AGENTS|CLAUDE|GEMINI|SKILL)\.md$|\.cursorrules$|\.mdc$|copilot-instructions\.md$|^\.claude/
