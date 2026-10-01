@@ -20,9 +20,10 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install and test
+        # Editable install, like scripts/setup.sh: config/ and evals/ are read from the source tree
         run: |
           set -o pipefail
-          { pip install ".[dev,refine]" && pytest -q -rfE; } 2>&1 | tee /tmp/ci.log
+          { pip install -e ".[dev,refine]" && pytest -q -rfE; } 2>&1 | tee /tmp/ci.log
       - name: Report failure output
         # Puts the end of the log in an annotation so it shows on the PR and in the checks API
         if: failure()
