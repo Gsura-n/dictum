@@ -19,5 +19,12 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install ".[dev,refine]"
-      - run: pytest -q
+      - name: Install and test
+        run: |
+          set -o pipefail
+          { pip install ".[dev,refine]" && pytest -q -rfE; } 2>&1 | tee /tmp/ci.log
+      - name: Report failure output
+        # Puts the end of the log in an annotation so it shows on the PR and in the checks API
+        if: failure()
+        run: |
+          tail -n 60 /tmp/ci.log | python3 -c "import sys; t=sys.stdin.read().replace('%','%25').replace('\r','%0D').replace('\n','%0A'); print('::error title=install and test output::' + t)"
