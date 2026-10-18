@@ -3,12 +3,12 @@ from __future__ import annotations
 import threading
 
 import numpy as np
-import sounddevice as sd
 
 from ..types import AudioClip
 
 
 def list_input_devices() -> list[dict]:
+    import sounddevice as sd  # lazy: needs PortAudio, absent on CI runners
     out = []
     for i, d in enumerate(sd.query_devices()):
         if d.get("max_input_channels", 0) > 0:
@@ -36,6 +36,7 @@ class SoundDeviceCapture:
         self.sample_rate = sample_rate          # what the pipeline wants
         self.channels = channels
         self.device = device
+        import sounddevice as sd  # lazy: needs PortAudio, absent on CI runners
         try:
             # kind="input" resolves the system default input; sd.default.device
             # can be -1 ("unset") which query_devices rejects.
@@ -49,7 +50,7 @@ class SoundDeviceCapture:
         self.device_rate = int(info["default_samplerate"])   # what the mic runs at
         self._frames: list[np.ndarray] = []
         self._lock = threading.Lock()
-        self._stream: sd.InputStream | None = None
+        self._stream = None                      # sd.InputStream while recording
 
     def _callback(self, indata, frames, time_info, status):
         if status:
@@ -58,6 +59,7 @@ class SoundDeviceCapture:
             self._frames.append(indata[:, 0].copy())
 
     def start(self) -> None:
+        import sounddevice as sd
         self._frames = []
         self._stream = sd.InputStream(
             samplerate=self.device_rate, channels=self.channels, dtype="float32",
