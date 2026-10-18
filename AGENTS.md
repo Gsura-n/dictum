@@ -58,7 +58,7 @@ Read the full output and fix the root cause. If two attempts fail, stop and summ
 
 ## 9. Commands
 - Setup on a Mac: `./scripts/setup.sh`
-- Install for tests (any OS): `pip install ".[dev,refine]"`
+- Install for tests (any OS): `pip install -e ".[dev,refine]"`
 - Test: `pytest -q` (unit tests use fake adapters; anything needing MLX, Quartz or PortAudio skips itself off macOS)
 - Refine evals: `dictum eval --suite targeted` (30 regression cases); full suites need `python scripts/fetch_datasets.py` first
 - STT benchmark: `dictum bench`
