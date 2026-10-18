@@ -11,7 +11,7 @@ Phase 3 of 4. What works today:
 - Hold Right Option anywhere on your Mac, talk, release: cleaned text is pasted into whatever app has focus. Right Command always uses plain dictation. Right Control adds a copy-edit pass that breaks long speech into sentences and paragraphs, for when you are writing rather than noting. Your clipboard is restored afterwards
 - A terminal push-to-talk mode (`dictum listen`) for testing each stage
 - Speech to text with a pluggable engine layer: NVIDIA Parakeet TDT (default) or Whisper, both via MLX
-- LLM cleanup through Ollama, with modes: dictation (filler removal, self-corrections, punctuation), command (speech to one shell command, never executed), academic (APA style prose). Each mode has its own prompt, few-shot examples and optionally its own model
+- LLM cleanup with modes: dictation (filler removal, self-corrections, punctuation), command (speech to one shell command, never executed), academic (APA style prose). The default dictation mode, `dictation_ft`, runs in-process on MLX (Llama 3.2 3B 4-bit plus a fine-tuned LoRA adapter); command, academic and edit modes use Ollama. Each mode has its own prompt, few-shot examples and optionally its own model
 - A personal dictionary that keeps your names and jargon spelled right
 - A benchmark command that compares STT engines on latency and word error rate on your own voice
 
@@ -31,11 +31,12 @@ dictum run         # hold Right Option anywhere and talk
 
 `dictum run` needs two macOS permissions for your terminal app, both under System Settings > Privacy & Security: **Input Monitoring** (to see the hotkey) and **Accessibility** (to paste). Grant them, then quit and reopen the terminal. `dictum check` tells you what is missing.
 
-Refinement needs [Ollama](https://ollama.com) running with a model pulled (default `llama3.2:3b`; command mode uses `qwen2.5-coder:7b`, academic uses `llama3.1:8b`, all configurable):
+The default dictation mode (`dictation_ft`) runs in-process on MLX and needs no Ollama: it loads `mlx-community/Llama-3.2-3B-Instruct-4bit` plus the fine-tuned adapter (the adapter is not published yet, see "Personalization" below). The other modes need [Ollama](https://ollama.com) running with their models pulled (command uses `qwen2.5-coder:7b`; academic and edit use `llama3.1:8b`; all configurable):
 
 ```bash
-ollama pull llama3.2:3b
-dictum listen                       # dictation mode
+ollama pull qwen2.5-coder:7b        # command mode
+ollama pull llama3.1:8b             # academic and edit modes
+dictum listen                       # default dictation mode (dictation_ft)
 dictum listen --mode command        # speech -> shell command, printed not run
 dictum refine "um so I I think we should uh ship it friday no monday" --all   # iterate on prompts without the mic
 dictum listen --refine passthrough  # raw STT only
