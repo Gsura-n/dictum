@@ -11,13 +11,15 @@ Phase 3 of 4. What works today:
 - Hold Right Option anywhere on your Mac, talk, release: cleaned text is pasted into whatever app has focus. Right Command always uses plain dictation. Right Control adds a copy-edit pass that breaks long speech into sentences and paragraphs, for when you are writing rather than noting. Your clipboard is restored afterwards
 - A terminal push-to-talk mode (`dictum listen`) for testing each stage
 - Speech to text with a pluggable engine layer: NVIDIA Parakeet TDT (default) or Whisper, both via MLX
-- LLM cleanup through Ollama, with modes: dictation (filler removal, self-corrections, punctuation), command (speech to one shell command, never executed), academic (APA style prose). Each mode has its own prompt, few-shot examples and optionally its own model
+- LLM cleanup with modes: dictation (filler removal, self-corrections, punctuation), command (speech to one shell command, never executed), academic (APA style prose). The hotkey dictation mode, `dictation_ft`, runs in-process on MLX (Llama 3.2 3B 4-bit plus a fine-tuned LoRA adapter); command, academic and edit modes use Ollama. Each mode has its own prompt, few-shot examples and optionally its own model
 - A personal dictionary that keeps your names and jargon spelled right
 - A benchmark command that compares STT engines on latency and word error rate on your own voice
 
 Coming next (phase 4): app-aware mode selection, a self-improving dictionary learned from your corrections, streaming partial results and a small overlay.
 
 ## Quick start (Apple Silicon)
+
+Built, tuned and measured on one machine: an M4 Mac mini with 16 GB. Other Apple Silicon Macs may work, but nothing here is tested on them.
 
 ```bash
 git clone <repo> dictum && cd dictum
@@ -29,11 +31,13 @@ dictum run         # hold Right Option anywhere and talk
 
 `dictum run` needs two macOS permissions for your terminal app, both under System Settings > Privacy & Security: **Input Monitoring** (to see the hotkey) and **Accessibility** (to paste). Grant them, then quit and reopen the terminal. `dictum check` tells you what is missing.
 
-Refinement needs [Ollama](https://ollama.com) running with a model pulled (default `llama3.2:3b`; command mode uses `qwen2.5-coder:7b`, academic uses `llama3.1:8b`, all configurable):
+The hotkey dictation mode (`dictation_ft`) runs in-process on MLX and needs no Ollama: it loads `mlx-community/Llama-3.2-3B-Instruct-4bit` plus the fine-tuned adapter (the adapter is not published yet, see "Personalization" below). Ollama is still needed for everything else: Right Option in a terminal routes to command, in Word or Pages to academic, and Right Control always runs edit, and all of those call Ollama (so does the prompted `dictation` mode, which `dictum listen` and `dictum refine` use when you pass no `--mode`). Run [Ollama](https://ollama.com) with the models pulled (command uses `qwen2.5-coder:7b`; dictation, academic and edit use `llama3.1:8b`; all configurable):
 
 ```bash
-ollama pull llama3.2:3b
-dictum listen                       # dictation mode
+ollama pull qwen2.5-coder:7b        # command mode
+ollama pull llama3.1:8b             # academic and edit modes
+dictum listen --mode dictation_ft   # the fine-tuned MLX mode the hotkeys use
+dictum listen                       # no --mode: the prompted Ollama dictation mode
 dictum listen --mode command        # speech -> shell command, printed not run
 dictum refine "um so I I think we should uh ship it friday no monday" --all   # iterate on prompts without the mic
 dictum listen --refine passthrough  # raw STT only
@@ -61,7 +65,7 @@ dictum eval --suite nl2bash --split test     # 300 programmer-written command de
 dictum eval --suite targeted                 # 30 hand-written regression cases
 ```
 
-Results on the held-out test splits for the default dictation mode (`dictation_ft`: Llama 3.2 3B 4-bit plus the fine-tuned LoRA adapter), measured on an M4 Mac mini on 2026-09-16, before the chunking change in 6574194 (a rerun on current code is pending). Each number links to the saved result file with every case in it.
+Results on the held-out test splits for the hotkey dictation mode (`dictation_ft`: Llama 3.2 3B 4-bit plus the fine-tuned LoRA adapter), measured on an M4 Mac mini on 2026-09-16, before the chunking change in 6574194 (a rerun on current code is pending). Each number links to the saved result file with every case in it.
 
 | suite | cases | pass rate (95% CI) | refine p50 / p95 |
 |---|---|---|---|
@@ -69,7 +73,7 @@ Results on the held-out test splits for the default dictation mode (`dictation_f
 | [DisfluencySpeech test, transcripts](evals/reported/20260916-223253-disflspeech-test.json) | 250 | 92% (88 to 95) | 0.90 s / 1.21 s |
 | [DisfluencySpeech test, from audio](evals/reported/20260916-215554-disflspeech-test-audio.json) | 250 | 71% (65 to 76) | 0.88 s / 1.19 s |
 
-The audio row runs the recordings through Parakeet first, so speech recognition errors count against it. Latency in that table is the refine stage only.
+The test splits were not used for tuning. The audio row runs the recordings through Parakeet first, so speech recognition errors count against it. Latency in that table is the refine stage only.
 
 End to end, on the same M4 Mac mini with 16 GB and the usual apps open, over 40 utterances of about 10 s of recorded human speech ([result file](evals/reported/baseline-20260923-150648.json), `scripts/measure_baseline.py`):
 
@@ -79,7 +83,7 @@ End to end, on the same M4 Mac mini with 16 GB and the usual apps open, over 40 
 | cleanup (3B + adapter) | 1.19 s | 1.55 s |
 | total after key release, before the paste | 1.43 s | 1.82 s |
 
-Memory with the default hotkeys loaded: 3.6 GB. The latency target is 1.0 s p50 on an M1, so this does not meet it yet. Cleanup time grows with the length of what was said (about 43 ms per output word), which is the next thing to fix. The test splits were not used for tuning.
+Memory with the default hotkeys loaded: 3.6 GB. The target on this machine is 1.0 s p50 and 1.8 s p95, so this does not meet it yet. Cleanup time grows with the length of what was said (about 43 ms per output word), which is the next thing to fix.
 
 Early results on the 30 hand-written targeted cases (written with an AI assistant, used for regression, not for headline claims):
 
@@ -93,7 +97,7 @@ What moved those numbers was mostly not the model: delimiting the transcript so 
 
 ## Personalization (optional, local)
 
-The default dictation mode (`dictation_ft`) uses a LoRA adapter fine-tuned on Llama 3.2 3B. **The adapter is not published yet.** Until it is, a fresh clone falls back to the base 3B model, which is much weaker at cleanup (4% on Disfl-QA dev against 76% with the adapter). In the meantime, train it with `scripts/finetune/train.sh`, or set `apps.default: dictation` and `right_command: dictation` in `config/local.yaml` to use the prompted Ollama model instead.
+The hotkey dictation mode (`dictation_ft`) uses a LoRA adapter fine-tuned on Llama 3.2 3B. **The adapter is not published yet.** Until it is, a fresh clone falls back to the base 3B model, which is much weaker at cleanup (4% on Disfl-QA dev against 76% with the adapter). In the meantime, train it with `scripts/finetune/train.sh`, or set `apps.default: dictation` and `right_command: dictation` in `config/local.yaml` to use the prompted Ollama model instead.
 
 Once you have an adapter, you can teach it your own vocabulary and phrasing:
 
