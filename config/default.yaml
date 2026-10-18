@@ -114,7 +114,7 @@ dictionary:
 # A mode is a refinement configuration: system prompt, few-shot examples,
 # optional model override and output guards. Add your own here.
 # Keep examples different from evals/cases so evals measure generalisation.
-default_mode: dictation
+default_mode: dictation_ft   # same mode the hotkeys use (apps.default, right_command); a test keeps them in sync
 modes:
   dictation:
     description: Clean up spoken text. Remove filler, apply self-corrections, punctuate.
