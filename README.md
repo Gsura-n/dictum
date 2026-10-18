@@ -96,7 +96,7 @@ What moved those numbers was mostly not the model: delimiting the transcript so 
 
 ## Personalization (optional, local)
 
-The default dictation mode (`dictation_ft`) uses a LoRA adapter fine-tuned on Llama 3.2 3B. **The adapter is not published yet.** Until it is, a fresh clone falls back to the base 3B model, which is much weaker at cleanup (4% on Disfl-QA dev against 76% with the adapter). In the meantime, train it with `scripts/finetune/train.sh`, or set `apps.default: dictation` and `right_command: dictation` in `config/local.yaml` to use the prompted Ollama model instead.
+The default dictation mode (`dictation_ft`) uses a LoRA adapter fine-tuned on Llama 3.2 3B. **The adapter is not published yet.** Until it is, a fresh clone falls back to the base 3B model, which is much weaker at cleanup (4% on Disfl-QA dev against 76% with the adapter). In the meantime, train it with `scripts/finetune/train.sh`, or set `default_mode: dictation`, `apps.default: dictation` and `right_command: dictation` in `config/local.yaml` to use the prompted Ollama model instead.
 
 Once you have an adapter, you can teach it your own vocabulary and phrasing:
 
