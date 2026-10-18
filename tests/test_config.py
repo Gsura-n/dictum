@@ -6,7 +6,7 @@ def test_default_config_loads():
     name, ecfg = cfg.stt_engine_config()
     assert name in ("parakeet", "whisper")
     assert "model" in ecfg
-    assert cfg.mode().name == "dictation"
+    assert cfg.mode().name == "dictation_ft"
     assert cfg.mode("command").prompt
 
 
@@ -20,5 +20,5 @@ def test_passthrough_refiner():
     from dictum.types import Transcript
     cfg = Config.load()
     t = Transcript(text="hello", engine="x", latency_s=0.1, audio_s=1.0)
-    r = Passthrough().refine(t, cfg.mode())
+    r = Passthrough().refine(t, cfg.mode("dictation"))
     assert r.text == "hello" and r.mode == "dictation"
