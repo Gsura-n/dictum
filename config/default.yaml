@@ -67,9 +67,13 @@ hotkeys:
 # Match on bundle id or app name; run `dictum apps` to see the frontmost app's.
 apps:
   default: dictation_ft     # fine-tuned 3B; "dictation" is the prompted Ollama version
+  # Terminals: text pasted there is always flattened to one line (a pasted newline
+  # can run a command), and they use command mode below. One list, shared by anchor.
+  # A config/local.yaml override of terminals does not reach the command rule.
+  terminals: &terminals [com.apple.Terminal, com.googlecode.iterm2, dev.warp.Warp-Stable, com.mitchellh.ghostty, net.kovidgoyal.kitty]
   rules:
     - mode: command
-      match: [com.apple.Terminal, com.googlecode.iterm2, dev.warp.Warp-Stable, com.mitchellh.ghostty, net.kovidgoyal.kitty]
+      match: *terminals
     - mode: academic
       match: [com.microsoft.Word, com.apple.iWork.Pages]
 

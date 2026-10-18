@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from .capture import AudioCapture, SoundDeviceCapture
@@ -10,6 +11,7 @@ from .inject import Injector, create_injector
 from .refine import Refiner, create_refiner
 from .refine.common import refine_levels
 from .stt import STTEngine, create_engine
+from .terminal import NOTES, terminal_safe
 from .types import AudioClip, Refined, Transcript
 
 
@@ -58,8 +60,13 @@ class Pipeline:
                 print(f"[warm-up] refiner for mode '{m}' unavailable: {e}", flush=True)
         return {"stt": stt_s, "refine": refine_s}
 
-    def process(self, clip: AudioClip, mode_name: str | None = None) -> tuple[Refined, Timing]:
-        """Everything after the mic: STT -> refine -> inject."""
+    def process(self, clip: AudioClip, mode_name: str | None = None,
+                flatten: Callable[[], str | None] | None = None) -> tuple[Refined, Timing]:
+        """Everything after the mic: STT -> refine -> inject.
+
+        flatten is asked right before the paste (the app in front can change while we
+        process) and returns why the text must be one line ("terminal", "unknown"), or None.
+        """
         t0 = time.perf_counter()
         transcript = self.stt.transcribe(clip)
         if len(transcript.text.split()) < 2:
@@ -74,6 +81,12 @@ class Pipeline:
                 # Degrade to the raw transcript rather than losing what was said.
                 refined = Refined(text=transcript.text, backend=f"failed ({type(e).__name__}: {e})",
                                   mode=mode_name or "", latency_s=0.0, source=transcript)
+        reason = flatten() if flatten else None
+        if reason:
+            safe = terminal_safe(refined.text)
+            if safe != refined.text:
+                refined.text = safe
+                refined.notes.append(NOTES[reason])
         self.injector.inject(refined.text)
         if self.cfg.raw.get("history", {}).get("enabled") and refined.text.strip():
             try:

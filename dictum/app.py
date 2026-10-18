@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import queue
 import subprocess
+import sys
 import threading
 import time
 
@@ -21,6 +22,7 @@ from .config import Config
 from .context import frontmost_app, mode_for_app
 from .hotkey.keymap import resolve_bindings
 from .pipeline import Pipeline
+from .terminal import flatten_reason
 
 SOUNDS = {"start": "/System/Library/Sounds/Tink.aiff",
           "stop": "/System/Library/Sounds/Pop.aiff",
@@ -46,6 +48,12 @@ class DictumApp:
         if self.sounds:
             subprocess.Popen(["afplay", SOUNDS[name]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    def _flatten_check(self, press_app):
+        """Asked at paste time: a terminal at key press OR now, or an unknown app, gets one-line text."""
+        apps_cfg = self.cfg.raw.get("apps", {})
+        fail_closed = sys.platform == "darwin"     # frontmost_app() is always None elsewhere
+        return lambda: flatten_reason(apps_cfg, press_app, frontmost_app(), fail_closed=fail_closed)
+
     # -- hotkey callbacks (tap thread: must be instant) -----------------------
     # Each event carries the time the key actually moved. The recorder can be
     # busy for a while opening the mic (Bluetooth headsets take 1-2 s to switch
@@ -62,7 +70,7 @@ class DictumApp:
 
     # -- recorder thread -----------------------------------------------------
     def _recorder(self) -> None:
-        mode, key_down_t, mic_open_s = None, 0.0, 0.0
+        mode, key_down_t, mic_open_s, press_app = None, 0.0, 0.0, None
         cap = self.pipe.capture
         while True:
             kind, arg = self._events.get()
@@ -79,7 +87,7 @@ class DictumApp:
                     self.console.print(f"[red]mic error:[/] {e}")
                     continue
                 mic_open_s = time.perf_counter() - key_down_t
-                mode = resolved
+                mode, press_app = resolved, app
                 self._sound("start")
                 where = f" in {app.name}" if app else ""
                 slow = f", mic took {mic_open_s:.1f}s to open" if mic_open_s > 0.3 else ""
@@ -105,7 +113,7 @@ class DictumApp:
                         self.console.print(f"[dim]  note: mic opened {mic_open_s:.1f}s after the key; "
                                            "words spoken before the start sound were not captured[/]")
                     self._sound("stop")
-                    self._clips.put((clip, m))
+                    self._clips.put((clip, m, press_app))
 
     # -- processor thread ----------------------------------------------------
     def _processor(self) -> None:
@@ -129,9 +137,9 @@ class DictumApp:
             return
         self._ready.set()
         while True:
-            clip, mode = self._clips.get()
+            clip, mode, press_app = self._clips.get()
             try:
-                refined, t = self.pipe.process(clip, mode)
+                refined, t = self.pipe.process(clip, mode, self._flatten_check(press_app))
             except Exception as e:
                 self.console.print(f"[red]error:[/] {type(e).__name__}: {e}")
                 continue
