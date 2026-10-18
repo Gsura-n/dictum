@@ -1,8 +1,62 @@
 # Dictum
 
-Local-first voice dictation for macOS. Hold a key, talk, get clean text in whatever app you are using. Nothing leaves your machine.
+Local-first voice dictation for macOS. Hold a key, talk, get clean text in whatever app you are using. Audio and text stay on your machine. Models download from Hugging Face on first use, and the Hugging Face library may check for model updates when Dictum starts. Dictum talks to Ollama only on localhost.
 
-Think of it as an open source take on tools like Wispr Flow, with two differences: it runs fully offline on Apple Silicon, and it has explicit modes (plain dictation, shell command, academic prose) instead of one generic cleanup.
+Think of it as an open source take on tools like Wispr Flow, with two differences: it runs locally on Apple Silicon, and it has explicit modes (plain dictation, copy-edit, shell command, academic prose) instead of one generic cleanup.
+
+## What Dictum is and isn't
+
+Dictum turns your speech into text at your cursor. It never acts on your behalf.
+
+Its output is always text placed where you already are, and you always press Enter or Send yourself. Dictum pastes with Cmd+V and never presses Enter. With the hotkeys (`dictum run`), text pasted into a terminal is forced to one line, so a pasted newline cannot run anything on its own.
+
+### What it does today
+
+| Mode | Default key | What it does |
+|---|---|---|
+| `dictation_ft` | Right Option in any app that is not a terminal, Word or Pages; Right Command in any app | Cleans up speech: removes filler, applies self-corrections, fixes punctuation |
+| `command` | Right Option, when a terminal is in front | Turns speech into one shell command and pastes it. It does not run it. Input over 40 words, or output that does not look like a command, falls back to `dictation_ft` |
+| `edit` | Right Control | Cleanup, then a light copy-edit into prose. Slower; for writing |
+| `academic` | Right Option, when Word or Pages is in front | Rewrites as formal academic prose (APA 7) |
+
+The keys and app rules are in `config/default.yaml` (`hotkeys.hold` and `apps`). The terminals are Terminal, iTerm2, Warp, Ghostty and kitty.
+
+### Planned for v1 (not built yet)
+
+- Voice editing of selected text: speak an instruction and the selection is rewritten.
+- A menu bar app with start, stop and status. The `dictum` CLI would control the same running instance. Today `dictum run` is a foreground process with no control interface.
+- Live partial text while you speak. Today text appears once, after you release the key.
+
+### What Dictum never does
+
+- Press Enter or Send.
+- Run the commands it writes.
+- Open apps or websites, or move or delete your files. It only manages its own files: `~/.dictum` (history, personal adapter) and the clips you ask for with `--save`. Actions like opening apps belong in a separate project, not Dictum.
+- Read your files. It reads its config, its models and adapters, and its own history database when history is on. It also saves and restores your clipboard around each paste.
+- Send audio or text anywhere. Audio and text stay on your machine. Models download from Hugging Face on first use, and the Hugging Face library may check for model updates when Dictum starts. Dictum talks to Ollama only on localhost.
+
+### Out of scope for v1
+
+Any Mac other than the M4 Mac mini with 16 GB, a DMG installer, Linux and Windows.
+
+### Keyboard note
+
+The default keys assume an Apple keyboard. On a PC-layout keyboard, macOS treats Alt as Option and the Windows key as Command, so the key next to the space bar is Option, and many PC keyboards have no right Command. To change what a key does, or to add one, put this in `config/local.yaml`:
+
+```yaml
+hotkeys:
+  hold:
+    right_control: dictation_ft   # change what an existing key does
+    f13: auto                     # add a key; auto picks the mode from the app in front
+```
+
+Supported keys: `right_option`, `left_option`, `right_command`, `left_command`, `right_shift`, `left_shift`, `right_control`, `left_control`, `fn`, `f13` to `f19`. Your file is merged over the defaults, so you can change a default key but not remove it.
+
+### Known terminal gaps
+
+- Alacritty, WezTerm and Hyper are not on the terminal list (`apps.terminals`), so text pasted there is not flattened.
+- VS Code and Cursor integrated terminals cannot be detected by bundle id. Your shell's bracketed paste is the only protection there.
+- `dictum listen --inject macos` pastes without the one-line guard.
 
 ## Status
 
@@ -14,8 +68,6 @@ Phase 3 of 4. What works today:
 - LLM cleanup with modes: dictation (filler removal, self-corrections, punctuation), command (speech to one shell command, never executed), academic (APA style prose). The default dictation mode, `dictation_ft`, runs in-process on MLX (Llama 3.2 3B 4-bit plus a fine-tuned LoRA adapter); command, academic and edit modes use Ollama. Each mode has its own prompt, few-shot examples and optionally its own model
 - A personal dictionary that keeps your names and jargon spelled right
 - A benchmark command that compares STT engines on latency and word error rate on your own voice
-
-Coming next (phase 4): app-aware mode selection, a self-improving dictionary learned from your corrections, streaming partial results and a small overlay.
 
 ## Quick start (Apple Silicon)
 
