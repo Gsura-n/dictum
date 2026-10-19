@@ -1,10 +1,9 @@
-"""Prefix cache for the MLX refiner: the fixed part of the prompt (system prompt plus few-shot examples) is
-prefilled once and restored after every call. These tests run without MLX, with a fake template, tokenizer
-and cache. The fake model's output is a function of everything it was fed, so a leak from one utterance into
-the next, or a wrong prefix, changes the output."""
+"""Prefix cache for the MLX refiner, tested without MLX: fake template, tokenizer and cache. The fake model's
+output is a function of everything it was fed, so a leak from one utterance into the next changes it."""
 import logging
 import re
 import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -34,21 +33,15 @@ def msgs(user="hello there", system="clean it up", examples=()):
     return m + [{"role": "user", "content": user}]
 
 
-class FakeCache:
-    def __init__(self, trimmable=True):
-        self.tokens, self.trimmable = [], trimmable
-
-
 class Harness:
     """A PrefixCache wired to fakes, counting what the real MLX calls would have done."""
 
     def __init__(self, enabled=True, trimmable=True, trim_works=True):
-        self.prefills, self.made, self.trim_works = 0, 0, trim_works
-        self.seen = []                                   # the context the fake model saw, per call
+        self.prefills, self.made, self.trim_works, self.seen = 0, 0, trim_works, []   # seen: context per call
 
         def make_cache():
             self.made += 1
-            return FakeCache(trimmable)
+            return SimpleNamespace(tokens=[], trimmable=trimmable)
 
         def prefill(cache, ids):
             self.prefills += 1
@@ -93,46 +86,36 @@ def test_split_falls_on_the_start_of_the_last_user_turn(examples):
     assert rest == "<|user|>the real transcript<|eot|><|assistant|>"
 
 
-def test_prefix_does_not_depend_on_the_transcript():
-    assert split_prompt(render, msgs(user="one"))[0] == split_prompt(render, msgs(user="two words"))[0]
-
-
-def test_split_refuses_when_the_two_renders_disagree():
-    """A template that stamps the date: midnight between the renders makes the prefix differ."""
-    stamps = iter(["day 1", "day 2"])
-
-    def moving(messages, add_generation_prompt):
-        return f"[{next(stamps)}]" + render(messages, add_generation_prompt)
-
+def test_split_refuses_when_it_cannot_split_cleanly():
+    stamps = iter(["day 1", "day 2"])         # a template that stamps the date, midnight between the renders
+    moving = lambda m, g: f"[{next(stamps)}]" + render(m, g)
     assert split_prompt(moving, msgs()) is None
+    assert split_prompt(render, [{"role": "user", "content": "x"}]) is None      # nothing before the last turn
 
 
-def test_split_refuses_with_nothing_before_the_last_turn():
-    assert split_prompt(render, [{"role": "user", "content": "x"}]) is None
-
-
-# ---- tokens: prefix + suffix is the full prompt ----------------------------------------------------------
 def test_tokenized_prefix_plus_suffix_equals_tokenized_full_prompt():
     prefix, full = split_prompt(render, msgs(examples=(("a b", "A b."),)))
     assert encode(prefix) + encode(full[len(prefix):]) == encode(full)
 
 
-def test_a_boundary_that_changes_the_tokens_runs_uncached(caplog):
+def test_a_boundary_that_changes_the_tokens_runs_uncached():
     h = Harness()
-    caplog.set_level(logging.DEBUG, LOG)
     full = "<|bos|><|system|>foobar<|eot|>"
     out = h.pc.run("m", ("s",), "<|bos|><|system|>foo", full, encode, h.gen)     # "foo"+"bar" merge differently
     assert out == "out:" + "|".join(encode(full))
     assert h.pc.miss_reasons["token_mismatch"] == 1 and h.prefills == 0
-    assert "token_mismatch" in caplog.text
 
 
 # ---- hits, restore, no leak ------------------------------------------------------------------------------
-def test_cached_output_equals_uncached_output():
+def test_cached_output_equals_uncached_output_and_each_miss_logs_one_line(caplog):
+    caplog.set_level(logging.DEBUG, LOG)
     h = Harness()
-    for user in ["one", "two words here", "x"]:
+    for user in ["one", "two words here", "x", "one"]:
         m = msgs(user=user, examples=(("a b", "A b."),))
         assert h.call(m) == h.plain(m)
+    assert (h.pc.hits, h.pc.misses) == (3, 1) and h.pc.miss_reasons["first_use"] == 1 and h.prefills == 1
+    h.call(msgs(system="changed"))
+    assert len([r for r in caplog.records if r.name == LOG]) == h.pc.misses == 2
 
 
 def test_cache_is_restored_to_the_prefix_after_each_call_and_nothing_leaks():
@@ -145,19 +128,10 @@ def test_cache_is_restored_to_the_prefix_after_each_call_and_nothing_leaks():
     h.call(b)
     assert "AAA" not in "".join(h.seen[1])                              # B never saw A
     assert h.seen[1][:entry.n_prefix] == encode(split_prompt(render, b)[0])
-    assert h.prefills == 1                                              # the prefix was prefilled once
-
-
-def test_hit_and_miss_counters():
-    h = Harness()
-    for _ in range(5):
-        h.call(msgs())
-    assert (h.pc.hits, h.pc.misses) == (4, 1) and h.pc.miss_reasons["first_use"] == 1
 
 
 def test_an_exception_in_generation_still_restores_the_cache():
     h = Harness()
-    h.call(msgs())
     with pytest.raises(RuntimeError):
         h.call(msgs(user="will fail"), raise_in_gen=True)
     entry = h.pc._entries["dictation_ft"]
@@ -174,13 +148,11 @@ def test_an_exception_in_generation_still_restores_the_cache():
 def test_prefix_changes_rebuild_the_cache(changed):
     h = Harness()
     h.call(msgs())
-    h.call(msgs())
-    assert h.prefills == 1
     m = msgs(**changed)
     assert h.call(m) == h.plain(m)
     assert h.prefills == 2 and h.pc.miss_reasons["prefix_changed"] == 1
     h.call(m)
-    assert h.prefills == 2                                              # and it is warm again
+    assert h.prefills == 2                                              # warm again
 
 
 @pytest.mark.parametrize("scope", [("other model", "adapter"), ("model", "personal adapter"), ("model", None)])
@@ -206,21 +178,15 @@ def test_a_cache_built_on_another_thread_is_discarded_and_rebuilt_here(caplog):
 
 
 # ---- no silent fallbacks ---------------------------------------------------------------------------------
-def test_disabled_runs_uncached_and_says_why(caplog):
-    h = Harness(enabled=False)
+def test_disabled_and_unsplittable_prompts_run_uncached_and_say_why(caplog):
     caplog.set_level(logging.DEBUG, LOG)
+    h = Harness(enabled=False)
     assert h.call(msgs()) == h.plain(msgs())
     assert h.pc.miss_reasons["disabled"] == 1 and h.prefills == 0 and h.pc.hits == 0
-    assert "disabled" in caplog.text
-
-
-def test_no_prefix_match_runs_uncached_and_says_why(caplog):
-    h = Harness()
-    caplog.set_level(logging.DEBUG, LOG)
-    m = msgs()
-    full = render(m, True)
+    h, full = Harness(), render(msgs(), True)
     assert h.pc.run("m", ("s",), None, full, encode, h.gen) == "out:" + "|".join(encode(full))
-    assert h.pc.miss_reasons["no_prefix_match"] == 1 and "no_prefix_match" in caplog.text
+    assert h.pc.miss_reasons["no_prefix_match"] == 1
+    assert "disabled" in caplog.text and "no_prefix_match" in caplog.text
 
 
 def test_non_trimmable_cache_runs_uncached_builds_once_and_says_why(caplog):
@@ -241,16 +207,6 @@ def test_failed_trim_drops_the_cache_logs_and_the_next_call_is_correct(caplog):
     assert h.call(msgs(user="third")) == h.plain(msgs(user="third"))
     assert h.pc.miss_reasons["trim_failed"] >= 1 and "trim_failed" in caplog.text
     assert h.seen[1] == encode(render(msgs(user="second"), True))       # nothing from call 1 leaked into call 2
-
-
-def test_every_miss_logs_exactly_one_line(caplog):
-    h = Harness()
-    caplog.set_level(logging.DEBUG, LOG)
-    h.call(msgs())
-    h.call(msgs())
-    h.call(msgs(system="changed"))
-    lines = [r for r in caplog.records if r.name == LOG]
-    assert len(lines) == h.pc.misses == 2
 
 
 # ---- wiring ----------------------------------------------------------------------------------------------

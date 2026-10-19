@@ -1,17 +1,13 @@
 """Reuse the fixed part of a prompt (system prompt plus few-shot examples) between calls.
 
-Every dictation sends the same ~70 tokens before the transcript. Prefilling them takes about a sixth of the
-refine time, so the MLX refiner prefills them once, keeps the KV cache, and after each call trims the cache
-back to the prefix so the next utterance starts from exactly the same state.
+The MLX refiner prefills the ~70 fixed tokens once, keeps the KV cache, and after each call trims it back to
+the prefix, so every utterance starts from the same state. No MLX import here: the cache operations are passed
+in, so the logic is testable on any OS.
 
-This module has no MLX import. The cache operations are passed in, which keeps the logic testable on any OS.
-
-A call that does not use a warm cache is a miss. Every miss has a reason, is counted, and is logged once at
-debug level: disabled, no_prefix_match, token_mismatch, non_trimmable, first_use, prefix_changed,
-thread_rebuild, trim_failed. Nothing falls back silently.
-
-Thread rule: MLX state belongs to the thread that made it (the app's processor thread). A cache built on
-another thread is discarded and rebuilt on the calling thread.
+A call that does not use a warm cache is a miss. Each miss has a reason, is counted and is logged once at debug
+level: disabled, no_prefix_match, token_mismatch, non_trimmable, first_use, prefix_changed, thread_rebuild,
+trim_failed. MLX state belongs to the thread that made it, so a cache built on another thread is discarded and
+rebuilt on the calling thread.
 """
 from __future__ import annotations
 
@@ -25,11 +21,8 @@ log = logging.getLogger(__name__)
 
 
 def split_prompt(render: Callable[[list[dict], bool], str], messages: list[dict]) -> tuple[str, str] | None:
-    """(prefix_text, full_text), where the prefix is everything before the last user turn.
-
-    Returns None when the prompt does not split cleanly: nothing precedes the last turn, or the full prompt does
-    not start with the prefix (a template that stamps the time, with midnight between the two renders).
-    """
+    """(prefix_text, full_text), the prefix being everything before the last user turn. None if the full prompt
+    does not start with it (a template that stamps the time, with midnight between the renders)."""
     if len(messages) < 2:
         return None
     full = render(messages, True)

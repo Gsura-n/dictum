@@ -33,13 +33,8 @@ class MLXRefiner:
                                         offset=lambda c: c[0].offset, trim=self._trim_cache,
                                         can_trim=self._can_trim, enabled=prefix_cache)
 
-    @property
-    def cache_hits(self) -> int:
-        return self.prefix_cache.hits
-
-    @property
-    def cache_misses(self) -> int:
-        return self.prefix_cache.misses
+    cache_hits = property(lambda self: self.prefix_cache.hits)
+    cache_misses = property(lambda self: self.prefix_cache.misses)
 
     def model_for(self, mode: Mode) -> str:
         return f"{self.model_id}+{self.adapter_path}" if self.adapter_path else self.model_id
@@ -49,7 +44,6 @@ class MLXRefiner:
             from mlx_lm import load
             self._model, self._tok = load(self.model_id, adapter_path=self.adapter_path)
 
-    # The mlx calls behind the prefix cache; the cache logic itself is in prefix_cache.py.
     def _make_cache(self):
         from mlx_lm.models.cache import make_prompt_cache
         return make_prompt_cache(self._model)
@@ -73,7 +67,7 @@ class MLXRefiner:
             raise RuntimeError("cache did not trim the requested number of tokens")
 
     def _encode(self, text: str) -> list[int]:
-        # the same choice mlx_lm.stream_generate makes for a string prompt
+        # same choice mlx_lm.stream_generate makes for a string prompt
         bos = self._tok.bos_token
         return self._tok.encode(text, add_special_tokens=bos is None or not text.startswith(bos))
 
