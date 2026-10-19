@@ -92,3 +92,16 @@
 - {id: u10-url-02, rule: url, fire: false, input: "python three scripts slash golden slash check underscore PR dot py all dash dash base origin slash main", expected: "python three scripts slash golden slash check underscore PR dot py all dash dash base origin slash main", note: "case 10"}
 - {id: u6-url-01, rule: url, fire: false, input: "and the slash V one slash models thing jarvis should be the first one", expected: "and the slash V one slash models thing jarvis should be the first one", note: "case 6"}
 - {id: u5-repeat-01, rule: repeated_words, fire: false, input: "update the status for that, that application", expected: "update the status for that, that application", note: "case 5: 'that that' is exempt from the repeat rule; the model handles the stutter"}
+
+# ---- speech-to-text style input: capitalized, with the punctuation the STT adds around command words
+- {id: t-stt-comma-fire-01, rule: comma, fire: true, position: mid, input: "Dear team, comma, the review moved to Thursday.", expected: "Dear team, the review moved to Thursday."}
+- {id: t-stt-period-fire-01, rule: period, fire: true, position: mid, input: "I pushed the fix, period. Let me know if CI passes.", expected: "I pushed the fix. Let me know if CI passes."}
+- {id: t-stt-qmark-fire-01, rule: question_mark, fire: true, input: "Can you review it today? Question mark.", expected: "Can you review it today?"}
+- {id: t-stt-colon-fire-01, rule: colon, fire: true, input: "Next steps, colon. New line. Merge the PR.", expected: "Next steps:\nMerge the PR."}
+- {id: t-stt-para-fire-01, rule: new_paragraph, fire: true, input: "That covers the budget. New paragraph. The hiring plan is next.", expected: "That covers the budget.\n\nThe hiring plan is next."}
+- {id: t-stt-fullstop-fire-01, rule: full_stop, fire: true, input: "Send it by Friday, full stop.", expected: "Send it by Friday."}
+- {id: t-stt-comma-nofire-01, rule: comma, fire: false, input: "Do I need the Oxford comma here?", expected: "Do I need the Oxford comma here?"}
+- {id: t-stt-comma-nofire-02, rule: comma, fire: false, input: "Remove that extra comma, please.", expected: "Remove that extra comma, please."}
+- {id: t-stt-qmark-nofire-01, rule: question_mark, fire: false, input: "Is that question mark supposed to be there?", expected: "Is that question mark supposed to be there?"}
+- {id: t-stt-newline-nofire-01, rule: new_line, fire: false, input: "Our new line of headphones ships in May.", expected: "Our new line of headphones ships in May."}
+- {id: t-stt-period-nofire-01, rule: period, fire: false, input: "It was a quiet period, so we caught up on reviews.", expected: "It was a quiet period, so we caught up on reviews."}
