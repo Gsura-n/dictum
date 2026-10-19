@@ -22,31 +22,59 @@ _PERIOD_NOUN_BEFORE = {"the", "a", "this", "that", "trial", "grace", "time", "wa
                        "same", "each", "every", "long", "short", "first", "last", "next", "free",
                        "notice", "billing", "reporting", "cooling", "honeymoon", "transition", "holding"}
 
-_SIMPLE = [
-    (r"\bquestion mark\b", "?"),
-    (r"\bexclamation (?:mark|point)\b", "!"),
-    (r"\bsemi ?colon\b", ";"),
-    (r"\bcomma\b", ","),
-    (r"\bfull stop\b", "."),
-]
-_BREAK = re.compile(r"\s*\b(new paragraph|next paragraph|new line|next line)\b[\s,.]*", re.IGNORECASE)
+_PUNCT = ",.;:!?"
+_SYMBOLS = {"question mark": "?", "exclamation mark": "!", "exclamation point": "!", "semicolon": ";",
+            "comma": ",", "full stop": ".", "period": ".", "colon": ":"}
+_CMD = r"(?P<cmd>question mark|exclamation (?:mark|point)|semi ?colon|comma|full stop|period|colon)"
+# The speech-to-text often punctuates around a command ("Hi Sarah, comma,"). The command replaces the mark
+# right before it and absorbs any right after. "literal" in front keeps the word as a word.
+_COMMAND = re.compile(rf"(?P<lit>\bliteral\s+)?(?P<pre>[{_PUNCT}]*)\s*\b{_CMD}\b(?P<post>[{_PUNCT}]*)", re.IGNORECASE)
+# Layout commands leave the punctuation before them alone.
+_BREAK = re.compile(r"(?P<lit>\bliteral\s+)?\s*\b(?P<cmd>new paragraph|next paragraph|new line|next line)\b(?P<post>[\s,.]*)",
+                    re.IGNORECASE)
+
+# A trigger word used as a noun: "the Oxford comma", "a comma splice", "a colon after the heading". A command
+# is never said right after a determiner, so those cover most talk about punctuation. Words after the trigger
+# that name the thing ("comma splice") count too; "is" and "after" do not, since "comma is the build green"
+# and "comma after lunch" are commands.
+_NOUN_BEFORE = {"the", "a", "an", "this", "that", "these", "those", "my", "our", "your", "his", "her", "their",
+                "oxford", "extra", "missing", "stray", "trailing", "serial", "another", "every", "each"}
+_NOUN_AFTER = {"splice", "key", "character", "symbol", "button", "placement"}
 
 # words that may legitimately repeat
 _ALLOWED_REPEATS = {"had", "that", "bye", "ha", "no", "very", "so"}
 
 
-def _period(m: re.Match) -> str:
-    prev = (m.group(1) or "").lower()
-    return m.group(0) if prev in _PERIOD_NOUN_BEFORE else f"{m.group(1)}."
+def _noun_use(text: str, start: int, end: int) -> bool:
+    """True if the trigger at text[start:end] is a noun, not a command. Punctuation next to it means the
+    speech-to-text heard a pause, so it is a command."""
+    before = text[:start].rstrip()
+    if before and before[-1] in _PUNCT:
+        return False
+    prev = _WORD.findall(before)[-1:]
+    nxt = re.match(r"\s+([A-Za-z']+)", text[end:])
+    return bool(prev and prev[0].lower() in _NOUN_BEFORE) or bool(nxt and nxt.group(1).lower() in _NOUN_AFTER)
 
 
 def spoken_punctuation(text: str) -> str:
-    for pat, rep in _SIMPLE:
-        text = re.sub(pat, rep, text, flags=re.IGNORECASE)
-    text = re.sub(r"\b(\w+)\s+period\b", _period, text, flags=re.IGNORECASE)
-    text = re.sub(r"\b(\w+)\s+colon\b(?!\s*(?:cancer|polyp))", r"\1:", text, flags=re.IGNORECASE)
-    text = re.sub(r"\s+([,.?!;:])", r"\1", text)
-    return text
+    def rep(m: re.Match) -> str:
+        if m.group("lit"):
+            return m.group("cmd")
+        cmd = " ".join(m.group("cmd").lower().split()).replace("semi colon", "semicolon")
+        if not m.group("pre"):
+            before = text[:m.start("cmd")]
+            prev = (_WORD.findall(before) or [""])[-1].lower()
+            if _noun_use(text, m.start("cmd"), m.end("cmd")):
+                return m.group(0)
+            if cmd in ("period", "colon") and not prev:
+                return m.group(0)
+            if cmd == "period" and prev in _PERIOD_NOUN_BEFORE:
+                return m.group(0)
+        if cmd == "colon" and re.match(r"\s*(?:cancer|polyp)", text[m.end():], re.IGNORECASE):
+            return m.group(0)
+        return _SYMBOLS[cmd]
+
+    return re.sub(r"\s+([,.?!;:])", r"\1", _COMMAND.sub(rep, text))
 
 
 def _join_spoken(tokens: str) -> str:
@@ -70,6 +98,8 @@ def spoken_addresses(text: str) -> str:
     url = re.compile(rf"\b({_W}(?:\s+dot\s+{_W})*\s+dot\s+{TLDS})((?:\s+slash\s+{seg})*)\b", re.IGNORECASE)
 
     def url_rep(m: re.Match) -> str:
+        if m.group(1).split()[0].lower() in _DET:      # "the dot com bubble"
+            return m.group(0)
         host = _join_spoken(m.group(1))
         path = "".join("/" + _join_spoken(p) for p in re.split(r"\s*\bslash\s+", m.group(2).strip())[1:])
         return host + path
@@ -205,13 +235,21 @@ def scratch_that(text: str) -> str:
 
 def split_breaks(text: str) -> list[tuple[str, str]]:
     """[(segment_text, break_after)], break_after in {"", "\\n", "\\n\\n"}."""
-    parts = _BREAK.split(text)
+    parts, breaks, cur, pos = [], [], "", 0
+    for m in _BREAK.finditer(text):
+        if m.group("lit"):                   # "literal new line": the words, without "literal"
+            cur += text[pos:m.start()] + m.group("cmd") + m.group("post")
+        elif _noun_use(text, m.start("cmd"), m.end("cmd")):
+            cur += text[pos:m.end()]
+        else:
+            parts.append(cur + text[pos:m.start()])
+            breaks.append("\n\n" if "paragraph" in m.group("cmd").lower() else "\n")
+            cur = ""
+        pos = m.end()
+    parts.append(cur + text[pos:])
     out: list[tuple[str, str]] = []
-    for i in range(0, len(parts), 2):
-        seg = parts[i].strip(" ,")
-        brk = ""
-        if i + 1 < len(parts):
-            brk = "\n\n" if "paragraph" in parts[i + 1].lower() else "\n"
+    for i, part in enumerate(parts):
+        seg, brk = part.strip(), breaks[i] if i < len(breaks) else ""
         if seg:
             out.append((seg, brk))
         elif out and brk:

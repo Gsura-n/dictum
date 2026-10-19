@@ -21,6 +21,8 @@ Its output is always text placed where you already are, and you always press Ent
 
 The keys and app rules are in `config/default.yaml` (`hotkeys.hold` and `apps`). The terminals are Terminal, iTerm2, Warp, Ghostty and kitty.
 
+Spoken punctuation ("comma", "new line") works in every mode except `command`. To keep the word instead, say "literal" first: "literal comma" types the word comma.
+
 ### Planned for v1 (not built yet)
 
 - Voice editing of selected text: speak an instruction and the selection is rewritten.

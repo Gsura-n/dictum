@@ -1,6 +1,7 @@
 """Tests for the normalize measurement scorer: attribution of misfires to the rule that fired, the
 metrics, and the CLI. They do NOT assert that normalize gets cases right; the known misfires fail today
-and the suite is measurement only. Case-file checks are in test_normalize_cases.py."""
+and the suite is measurement only. Fixtures are sentences that fire; the noun-use sentences that used to
+fire are asserted not to in test_normalize_punct.py. Case-file checks are in test_normalize_cases.py."""
 import pytest
 import yaml
 from typer.testing import CliRunner
@@ -18,19 +19,19 @@ def test_loader_rejects_a_malformed_case(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("text, fired", [
     ("I had had enough of that", []),
-    ("the semicolon is optional", ["semicolon"]),
-    ("the question mark at the end looks wrong", ["question_mark"]),
-    ("add a colon after the heading", ["colon"]),
-    ("the new line of products launches Friday", ["new_line"]),
-    ("a next paragraph is long", ["new_paragraph"]),
-    ("the dot com bubble burst", ["url"]),
+    ("hello semicolon world", ["semicolon"]),
+    ("really question mark that is surprising", ["question_mark"]),
+    ("note colon the office closes early", ["colon"]),
+    ("milk new line eggs", ["new_line"]),
+    ("dear team new paragraph thanks", ["new_paragraph"]),
+    ("our site is example dot io", ["url"]),
     ("send it to j patel at outlook dot com", ["email"]),
     ("the the report is ready", ["repeated_words"]),
     ("hello comma world", ["comma"]),
     ("I think I think we should ship it", ["restart"]),
     ("it goes on and on and on and on", ["restart", "phrase_repeat"]),   # each alone makes the same fix
     ("send it Monday scratch that send it Tuesday", ["scratch_that"]),
-    ("the semi colon is optional", ["semicolon"]),                 # not also credited to colon
+    ("I came semi colon I saw", ["semicolon"]),                    # not also credited to colon
     ("call me period then the the report", ["period", "repeated_words"]),
 ])
 def test_fired_rules(text, fired):
@@ -48,7 +49,7 @@ def _case(id, rule, fire, text, expected, position=""):
 
 
 def test_misfire_is_charged_to_the_rule_that_fired_not_the_target():
-    cases = [_case("a", "colon", False, "the semicolon is optional", "the semicolon is optional")]
+    cases = [_case("a", "colon", False, "hello semicolon world", "hello semicolon world")]
     (row,) = ne.score(cases, ne.default_cfg())
     assert row["passed"] is False and row["fired"] == ["semicolon"]
     rules = ne.summarize([row])["rules"]
@@ -57,9 +58,9 @@ def test_misfire_is_charged_to_the_rule_that_fired_not_the_target():
 
 def test_metrics_arithmetic():
     cases = [
-        _case("f1", "comma", True, "a comma b", "a, b"),                       # tp
-        _case("f2", "comma", True, "a comma b", "WRONG"),                      # fn
-        _case("n1", "comma", False, "a comma splice", "a comma splice"),       # fp (comma fired)
+        _case("f1", "comma", True, "x comma y", "x, y"),                       # tp
+        _case("f2", "comma", True, "x comma y", "WRONG"),                      # fn
+        _case("n1", "comma", False, "hello comma world", "hello comma world"), # fp (comma fired)
         _case("n2", "comma", False, "plain words", "plain words"),             # tn
     ]
     s = ne.summarize(ne.score(cases, ne.default_cfg()))
