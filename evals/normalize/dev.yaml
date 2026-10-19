@@ -1,0 +1,89 @@
+# Dev split: cases to tune against. Expected outputs are what a correct normalize should
+# produce (replacement and spacing only; capitalising is the model's job, except where
+# scratch_that already does it). fire: true means the rule should change the text.
+# position: mid = the trigger is inside a clause, end = it closes the clause.
+# Written with an AI assistant: a regression suite, not independent evidence.
+
+# ---- comma
+- {id: comma-fire-01, rule: comma, fire: true, position: mid, input: "apples comma oranges comma and pears", expected: "apples, oranges, and pears"}
+- {id: comma-fire-02, rule: comma, fire: true, position: mid, input: "first comma second comma third", expected: "first, second, third"}
+- {id: comma-fire-03, rule: comma, fire: true, position: mid, input: "the dates are Monday comma Tuesday", expected: "the dates are Monday, Tuesday"}
+- {id: comma-fire-04, rule: comma, fire: true, position: end, input: "hi Maria comma", expected: "hi Maria,"}
+- {id: comma-nofire-01, rule: comma, fire: false, input: "I always use the Oxford comma in lists", expected: "I always use the Oxford comma in lists", note: "known misfire"}
+- {id: comma-nofire-02, rule: comma, fire: false, input: "a comma splice joins two sentences", expected: "a comma splice joins two sentences"}
+
+# ---- period
+- {id: period-fire-01, rule: period, fire: true, position: mid, input: "call me period then email", expected: "call me. then email"}
+- {id: period-fire-02, rule: period, fire: true, position: mid, input: "we shipped it period then we tested it", expected: "we shipped it. then we tested it"}
+- {id: period-fire-03, rule: period, fire: true, position: end, input: "that is all for today period", expected: "that is all for today."}
+- {id: period-nofire-01, rule: period, fire: false, input: "a period of time passed before anyone replied", expected: "a period of time passed before anyone replied"}
+- {id: period-nofire-02, rule: period, fire: false, input: "the Jurassic period lasted millions of years", expected: "the Jurassic period lasted millions of years"}
+
+# ---- full stop
+- {id: fullstop-fire-01, rule: full_stop, fire: true, input: "the meeting is at noon full stop", expected: "the meeting is at noon."}
+- {id: fullstop-nofire-01, rule: full_stop, fire: false, input: "the bus came to a full stop at the light", expected: "the bus came to a full stop at the light"}
+
+# ---- question mark
+- {id: qmark-fire-01, rule: question_mark, fire: true, input: "are you free on Friday question mark", expected: "are you free on Friday?"}
+- {id: qmark-fire-02, rule: question_mark, fire: true, input: "really question mark that is surprising", expected: "really? that is surprising"}
+- {id: qmark-nofire-01, rule: question_mark, fire: false, input: "the question mark at the end looks wrong", expected: "the question mark at the end looks wrong", note: "known misfire"}
+
+# ---- exclamation
+- {id: excl-fire-01, rule: exclamation, fire: true, input: "congratulations on the launch exclamation point", expected: "congratulations on the launch!"}
+- {id: excl-nofire-01, rule: exclamation, fire: false, input: "an exclamation mark is too loud for a work email", expected: "an exclamation mark is too loud for a work email"}
+
+# ---- semicolon
+- {id: semi-fire-01, rule: semicolon, fire: true, input: "I came semicolon I saw semicolon I left", expected: "I came; I saw; I left"}
+- {id: semi-nofire-01, rule: semicolon, fire: false, input: "the semicolon is optional", expected: "the semicolon is optional"}
+
+# ---- colon
+- {id: colon-fire-01, rule: colon, fire: true, input: "ingredients colon flour sugar eggs", expected: "ingredients: flour sugar eggs"}
+- {id: colon-fire-02, rule: colon, fire: true, input: "note colon the office closes early", expected: "note: the office closes early"}
+- {id: colon-nofire-01, rule: colon, fire: false, input: "add a colon after the heading", expected: "add a colon after the heading", note: "known misfire"}
+- {id: colon-nofire-02, rule: colon, fire: false, input: "the doctor checked for colon cancer", expected: "the doctor checked for colon cancer"}
+
+# ---- new line
+- {id: newline-fire-01, rule: new_line, fire: true, position: mid, input: "the address is 12 main street new line springfield", expected: "the address is 12 main street\nspringfield"}
+- {id: newline-fire-02, rule: new_line, fire: true, position: mid, input: "milk new line eggs new line bread", expected: "milk\neggs\nbread"}
+- {id: newline-fire-03, rule: new_line, fire: true, position: mid, input: "item one next line item two", expected: "item one\nitem two"}
+- {id: newline-nofire-01, rule: new_line, fire: false, input: "the new line of products launches Friday", expected: "the new line of products launches Friday", note: "known misfire"}
+- {id: newline-nofire-02, rule: new_line, fire: false, input: "please add a new line character at the end of the file", expected: "please add a new line character at the end of the file"}
+- {id: newline-nofire-03, rule: new_line, fire: false, input: "the next line of defense is the firewall", expected: "the next line of defense is the firewall"}
+
+# ---- new paragraph
+- {id: para-fire-01, rule: new_paragraph, fire: true, input: "dear team new paragraph thanks for the update", expected: "dear team\n\nthanks for the update"}
+- {id: para-fire-02, rule: new_paragraph, fire: true, input: "that covers the budget next paragraph now the schedule", expected: "that covers the budget\n\nnow the schedule"}
+- {id: para-nofire-01, rule: new_paragraph, fire: false, input: "the next paragraph of the essay needs a citation", expected: "the next paragraph of the essay needs a citation"}
+
+# ---- email
+- {id: email-fire-01, rule: email, fire: true, input: "send it to j patel at outlook dot com", expected: "send it to jpatel@outlook.com"}
+- {id: email-fire-02, rule: email, fire: true, input: "my address is maria dot lopez at example dot org please write", expected: "my address is maria.lopez@example.org please write"}
+- {id: email-nofire-01, rule: email, fire: false, input: "meet me at the office at noon", expected: "meet me at the office at noon"}
+- {id: email-nofire-02, rule: email, fire: false, input: "please put the email address in the footer at the bottom", expected: "please put the email address in the footer at the bottom"}
+
+# ---- url
+- {id: url-fire-01, rule: url, fire: true, input: "go to github dot com slash gsura dash n slash dictum", expected: "go to github.com/gsura-n/dictum"}
+- {id: url-fire-02, rule: url, fire: true, input: "our site is example dot io", expected: "our site is example.io"}
+- {id: url-nofire-01, rule: url, fire: false, input: "the dot com bubble burst in two thousand", expected: "the dot com bubble burst in two thousand"}
+
+# ---- repeated words
+- {id: repeat-fire-01, rule: repeated_words, fire: true, input: "the the report is is ready", expected: "the report is ready"}
+- {id: repeat-fire-02, rule: repeated_words, fire: true, input: "so, it, it, it was great", expected: "so, it was great"}
+- {id: repeat-nofire-01, rule: repeated_words, fire: false, input: "I had had enough of that", expected: "I had had enough of that"}
+- {id: repeat-nofire-02, rule: repeated_words, fire: false, input: "she said that that is true", expected: "she said that that is true"}
+
+# ---- restarts
+- {id: restart-fire-01, rule: restart, fire: true, input: "how would be how I would be able to do this", expected: "how I would be able to do this"}
+- {id: restart-fire-02, rule: restart, fire: true, input: "I think I think we should ship it", expected: "I think we should ship it"}
+- {id: restart-nofire-01, rule: restart, fire: false, input: "the cat sat on the mat", expected: "the cat sat on the mat"}
+- {id: restart-nofire-02, rule: restart, fire: false, input: "the more you practice the more you improve", expected: "the more you practice the more you improve"}
+
+# ---- phrase repeats
+- {id: phrase-fire-01, rule: phrase_repeat, fire: true, input: "we can make this better and better and better and better", expected: "we can make this better and better"}
+- {id: phrase-nofire-01, rule: phrase_repeat, fire: false, input: "tea or coffee or juice", expected: "tea or coffee or juice"}
+
+# ---- scratch that
+- {id: scratch-fire-01, rule: scratch_that, fire: true, input: "send it Monday scratch that send it Tuesday", expected: "Send it Tuesday"}
+- {id: scratch-fire-02, rule: scratch_that, fire: true, input: "call Priya at noon. Ask about the budget scratch that ask about the schedule.", expected: "call Priya at noon. Ask about the schedule."}
+- {id: scratch-nofire-01, rule: scratch_that, fire: false, input: "I need to scratch that itch", expected: "I need to scratch that itch"}
+- {id: scratch-nofire-02, rule: scratch_that, fire: false, input: "strike that off the list", expected: "strike that off the list"}
