@@ -291,6 +291,46 @@ def _print_summary(summary, suite, split, markdown, path, results, failures):
     console.print(f"[dim]full results: {path}[/]")
 
 
+@app.command("eval-normalize")
+def eval_normalize(
+    split: str = typer.Option("dev", help="dev (tune against) | test (score only when evaluating a fix)"),
+    failures: bool = typer.Option(None, "--failures/--no-failures", help="Print failing cases (default: on for dev, off for test)"),
+):
+    """Measure the normalize rules (spoken punctuation and the rest): precision and recall per rule. No models."""
+    from . import normalize_eval as ne
+
+    if split not in ne.SPLITS:
+        raise typer.BadParameter("split must be dev or test")
+    rows = ne.score(ne.load(split), ne.default_cfg())
+    summary = ne.summarize(rows)
+    path = ne.save(split, rows, summary)
+    if failures if failures is not None else split == "dev":
+        for r in rows:
+            if not r["passed"]:
+                console.print(f"[red]✗[/] [bold]{r['rule']}/{r['id']}[/] [dim]({'should fire' if r['fire'] else 'should not fire'}"
+                              f"; fired: {', '.join(r['fired']) or 'none'})[/]")
+                console.print(f"   [dim]in: [/] {r['input']}")
+                console.print(f"   [dim]exp:[/] {r['expected']!r}")
+                console.print(f"   [dim]out:[/] {r['output']!r}")
+    else:
+        console.print("[dim]test split: failures hidden so they cannot leak into tuning (--failures to override)[/]")
+
+    def pct(x, ci):
+        return "n/a" if x is None else f"{x:.0%} ({ci[0]:.0%} to {ci[1]:.0%})"
+    t = Table("rule", "fire", "no-fire", "recall (95% CI)", "precision (95% CI)", "misfires",
+              title=f"normalize rules / {split}")
+    for name, s in [*summary["rules"].items(), ("[bold]overall[/]", summary["overall"])]:
+        t.add_row(name, str(s["n_fire"]), str(s["n_nofire"]), pct(s["recall"], s["recall_ci"]),
+                  pct(s["precision"], s["precision_ci"]), str(s["fp"]))
+    console.print(t)
+    o = summary["overall"]
+    console.print(f"cases passing: [bold]{o['passed']}/{o['n']}[/] ({o['pass_ci'][0]:.0%} to {o['pass_ci'][1]:.0%}). "
+                  f"Failures with no rule found: {o['unattributed_failures']}. "
+                  f"Should-fire cases that also tripped another rule: {o['collateral_in_fire_cases']}.")
+    console.print("[dim]Precision reflects this half-and-half mix, not real speech. Per-rule intervals are wide: few cases per rule.[/]")
+    console.print(f"[dim]full results: {path}[/]")
+
+
 @app.command("prep-nl2bash")
 def prep_nl2bash(
     target: int = typer.Option(None, help="Stop after this many executable references (default: dev + test sizes)"),
