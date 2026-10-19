@@ -84,3 +84,11 @@
 - {id: t-scratch-fire-02, rule: scratch_that, fire: true, input: "Call Priya. Book the room scratch that book the hall.", expected: "Call Priya. Book the hall."}
 - {id: t-scratch-nofire-01, rule: scratch_that, fire: false, input: "she told me not to scratch that", expected: "she told me not to scratch that"}
 - {id: t-scratch-nofire-02, rule: scratch_that, fire: false, input: "strike that match on the box", expected: "strike that match on the box"}
+
+# ---- from the owner's dictation cases (source case number in the note). Not run through normalize
+# before they were written down. Fillers and stutters were trimmed from the phrases.
+- {id: u2-repeat-01, rule: repeated_words, fire: true, input: "the gateway should, should just fall back to the mini", expected: "the gateway should just fall back to the mini", note: "case 2"}
+- {id: u10-url-01, rule: url, fire: false, input: "ruff check dot and then ruff format dash dash check dot", expected: "ruff check dot and then ruff format dash dash check dot", note: "case 10: command mode's job, not normalize's"}
+- {id: u10-url-02, rule: url, fire: false, input: "python three scripts slash golden slash check underscore PR dot py all dash dash base origin slash main", expected: "python three scripts slash golden slash check underscore PR dot py all dash dash base origin slash main", note: "case 10"}
+- {id: u6-url-01, rule: url, fire: false, input: "and the slash V one slash models thing jarvis should be the first one", expected: "and the slash V one slash models thing jarvis should be the first one", note: "case 6"}
+- {id: u5-repeat-01, rule: repeated_words, fire: false, input: "update the status for that, that application", expected: "update the status for that, that application", note: "case 5: 'that that' is exempt from the repeat rule; the model handles the stutter"}

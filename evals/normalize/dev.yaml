@@ -87,3 +87,16 @@
 - {id: scratch-fire-02, rule: scratch_that, fire: true, input: "call Priya at noon. Ask about the budget scratch that ask about the schedule.", expected: "call Priya at noon. Ask about the schedule."}
 - {id: scratch-nofire-01, rule: scratch_that, fire: false, input: "I need to scratch that itch", expected: "I need to scratch that itch"}
 - {id: scratch-nofire-02, rule: scratch_that, fire: false, input: "strike that off the list", expected: "strike that off the list"}
+
+# ---- from the owner's dictation cases (source case number in the id). Moved to dev, not test,
+# because the output of normalize on earlier versions of these was seen before they were written down.
+# Spec: a punctuation command replaces the punctuation the speech-to-text put right before it and
+# absorbs any it put right after; a layout command (new line, new paragraph) leaves the preceding
+# punctuation alone. Fillers and stutters were trimmed from the phrases.
+- {id: u7-newline-01, rule: new_line, fire: true, input: "Hi Sarah, comma, new line. Thanks for reaching out about the AI engineer role.", expected: "Hi Sarah,\nThanks for reaching out about the AI engineer role.", note: "case 7"}
+- {id: u8-colon-01, rule: colon, fire: true, input: "an honest take on the new space movie. Colon. New line. The visuals are stunning", expected: "an honest take on the new space movie:\nThe visuals are stunning", note: "case 8"}
+- {id: u4-comma-01, rule: comma, fire: true, position: mid, input: "a smaller model can handle most requests, comma, while larger models are only needed for complex reasoning", expected: "a smaller model can handle most requests, while larger models are only needed for complex reasoning", note: "case 4"}
+- {id: u4-fullstop-01, rule: full_stop, fire: true, input: "larger models are only needed for complex reasoning, full stop.", expected: "larger models are only needed for complex reasoning.", note: "case 4"}
+- {id: u7-qmark-01, rule: question_mark, fire: true, input: "Does that work for you? Question mark.", expected: "Does that work for you?", note: "case 7"}
+- {id: u7-para-01, rule: new_paragraph, fire: true, input: "Thanks for reaching out about the AI engineer role. New paragraph. I'm free Tuesday or Wednesday afternoon.", expected: "Thanks for reaching out about the AI engineer role.\n\nI'm free Tuesday or Wednesday afternoon.", note: "case 7"}
+- {id: u7-newline-02, rule: new_line, fire: true, input: "Best, comma, new line, Gauttam.", expected: "Best,\nGauttam.", note: "case 7"}
