@@ -260,12 +260,9 @@ def test_prefix_cache_is_on_by_default_in_config():
 
 
 def test_real_model_cached_equals_uncached():
-    """Needs MLX and the base model in the local Hugging Face cache; skips itself elsewhere."""
+    """Needs MLX (skips itself off macOS) and the base model, which dictum cannot run without."""
     pytest.importorskip("mlx_lm")
-    from huggingface_hub import try_to_load_from_cache
     model = "mlx-community/Llama-3.2-3B-Instruct-4bit"
-    if not isinstance(try_to_load_from_cache(model, "config.json"), str):
-        pytest.skip("base model not in the local cache")
     from dictum.config import Config
     from dictum.refine.mlx_refiner import MLXRefiner
     cfg = Config.load()
