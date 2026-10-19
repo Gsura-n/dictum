@@ -118,13 +118,15 @@ dictum eval --suite nl2bash --split test     # 300 programmer-written command de
 dictum eval --suite targeted                 # 30 hand-written regression cases
 ```
 
-Results on the held-out test splits for the default dictation mode (`dictation_ft`: Llama 3.2 3B 4-bit plus the fine-tuned LoRA adapter), measured on an M4 Mac mini on 2026-09-16, before the chunking change in 6574194 (a rerun on current code is pending). Each number links to the saved result file with every case in it.
+Results on the held-out test splits for the default dictation mode (`dictation_ft`: Llama 3.2 3B 4-bit plus the fine-tuned LoRA adapter), rerun on an M4 Mac mini on 2026-10-18 with current code (f7568f5). Each number links to the saved result file with every case in it. The September column is the earlier run, kept in `evals/reported/`.
 
-| suite | cases | pass rate (95% CI) | refine p50 / p95 |
-|---|---|---|---|
-| [Disfl-QA test](evals/reported/20260916-231606-disflqa-test.json) | 500 | 73% (69 to 77) | 0.61 s / 0.85 s |
-| [DisfluencySpeech test, transcripts](evals/reported/20260916-223253-disflspeech-test.json) | 250 | 92% (88 to 95) | 0.90 s / 1.21 s |
-| [DisfluencySpeech test, from audio](evals/reported/20260916-215554-disflspeech-test-audio.json) | 250 | 71% (65 to 76) | 0.88 s / 1.19 s |
+| suite | cases | pass rate (95% CI) | September 2026-09-16 | refine p50 / p95 |
+|---|---|---|---|---|
+| [Disfl-QA test](evals/reported/20261018-230429-disflqa-test.json) | 500 | 73% (69 to 77) | 73% (69 to 77), [file](evals/reported/20260916-231606-disflqa-test.json) | 0.64 s / 0.88 s |
+| [DisfluencySpeech test, transcripts](evals/reported/20261018-230821-disflspeech-test.json) | 250 | 92% (88 to 94) | 92% (88 to 95), [file](evals/reported/20260916-223253-disflspeech-test.json) | 0.90 s / 1.22 s |
+| [DisfluencySpeech test, from audio](evals/reported/20261018-231256-disflspeech-test-audio.json) | 250 | 73% (67 to 78) | 71% (65 to 76), [file](evals/reported/20260916-215554-disflspeech-test-audio.json) | 0.88 s / 1.19 s |
+
+Passing cases, September to now: Disfl-QA 366 to 365 of 500, transcripts 230 to 229 of 250, audio 178 to 183 of 250. Disfl-QA and transcripts each lost one case; the audio run gained five. All three differences are inside the intervals. Since September the refine path changed in the chunking and edit-mode commit (6574194) and in the spoken-punctuation fix (fb24ad0); the default-mode change (b8f60c2) does not affect these runs, which force `dictation_ft`.
 
 The test splits were not used for tuning. The audio row runs the recordings through Parakeet first, so speech recognition errors count against it. Latency in that table is the refine stage only.
 
