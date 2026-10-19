@@ -92,11 +92,6 @@ def test_chunk_keeps_corrections_with_their_sentence():
 
 
 def test_command_mode_falls_back_for_long_input():
-    import pytest
-    try:
-        import sounddevice  # noqa: F401  (pipeline imports the mic layer)
-    except (ImportError, OSError):
-        pytest.skip("sounddevice/PortAudio not available")
     from dictum.config import Config
     from dictum.pipeline import Pipeline
     from dictum.types import Refined, Transcript
