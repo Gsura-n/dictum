@@ -58,8 +58,8 @@ def test_misfire_is_charged_to_the_rule_that_fired_not_the_target():
 
 def test_metrics_arithmetic():
     cases = [
-        _case("f1", "comma", True, "a comma b", "a, b"),                       # tp
-        _case("f2", "comma", True, "a comma b", "WRONG"),                      # fn
+        _case("f1", "comma", True, "x comma y", "x, y"),                       # tp
+        _case("f2", "comma", True, "x comma y", "WRONG"),                      # fn
         _case("n1", "comma", False, "hello comma world", "hello comma world"), # fp (comma fired)
         _case("n2", "comma", False, "plain words", "plain words"),             # tn
     ]
