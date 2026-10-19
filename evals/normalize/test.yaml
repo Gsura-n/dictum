@@ -1,0 +1,107 @@
+# Test split: score only when evaluating a fix, never while choosing it. Read the failures
+# only after the fix is final. Same conventions as dev.yaml. Expected outputs were written
+# by hand from the spec, before normalize was run on these inputs.
+
+# ---- comma
+- {id: t-comma-fire-01, rule: comma, fire: true, position: mid, input: "buy milk comma eggs comma and bread", expected: "buy milk, eggs, and bread"}
+- {id: t-comma-fire-02, rule: comma, fire: true, position: mid, input: "we met in Paris comma Rome comma and Madrid", expected: "we met in Paris, Rome, and Madrid"}
+- {id: t-comma-fire-03, rule: comma, fire: true, position: end, input: "thanks for waiting comma", expected: "thanks for waiting,"}
+- {id: t-comma-nofire-01, rule: comma, fire: false, input: "put a comma after the greeting in a letter", expected: "put a comma after the greeting in a letter"}
+- {id: t-comma-nofire-02, rule: comma, fire: false, input: "my favorite punctuation mark is the comma", expected: "my favorite punctuation mark is the comma"}
+
+# ---- period
+- {id: t-period-fire-01, rule: period, fire: true, position: mid, input: "I finished the report period now I am reviewing it", expected: "I finished the report. now I am reviewing it"}
+- {id: t-period-fire-02, rule: period, fire: true, position: mid, input: "see you tomorrow period then we will talk", expected: "see you tomorrow. then we will talk"}
+- {id: t-period-fire-03, rule: period, fire: true, position: end, input: "thanks again for your help period", expected: "thanks again for your help."}
+- {id: t-period-nofire-01, rule: period, fire: false, input: "the grace period ends on Friday", expected: "the grace period ends on Friday"}
+- {id: t-period-nofire-02, rule: period, fire: false, input: "that was the best period of my life", expected: "that was the best period of my life"}
+
+# ---- full stop
+- {id: t-fullstop-fire-01, rule: full_stop, fire: true, input: "send the invoice full stop", expected: "send the invoice."}
+- {id: t-fullstop-nofire-01, rule: full_stop, fire: false, input: "the train made a full stop outside the station", expected: "the train made a full stop outside the station"}
+
+# ---- question mark
+- {id: t-qmark-fire-01, rule: question_mark, fire: true, input: "where did you put the keys question mark", expected: "where did you put the keys?"}
+- {id: t-qmark-fire-02, rule: question_mark, fire: true, input: "is it ready question mark I need it now", expected: "is it ready? I need it now"}
+- {id: t-qmark-nofire-01, rule: question_mark, fire: false, input: "use a question mark only at the end of a question", expected: "use a question mark only at the end of a question"}
+- {id: t-qmark-nofire-02, rule: question_mark, fire: false, input: "she tattooed a question mark on her wrist", expected: "she tattooed a question mark on her wrist"}
+
+# ---- exclamation
+- {id: t-excl-fire-01, rule: exclamation, fire: true, input: "happy birthday exclamation mark", expected: "happy birthday!"}
+- {id: t-excl-fire-02, rule: exclamation, fire: true, input: "wow exclamation mark that was fast", expected: "wow! that was fast"}
+- {id: t-excl-nofire-01, rule: exclamation, fire: false, input: "the exclamation point is overused in marketing emails", expected: "the exclamation point is overused in marketing emails"}
+
+# ---- semicolon
+- {id: t-semi-fire-01, rule: semicolon, fire: true, input: "ready semicolon set semicolon go", expected: "ready; set; go"}
+- {id: t-semi-nofire-01, rule: semicolon, fire: false, input: "use a semi colon to join two related clauses", expected: "use a semi colon to join two related clauses"}
+
+# ---- colon
+- {id: t-colon-fire-01, rule: colon, fire: true, input: "dear Ana colon", expected: "dear Ana:"}
+- {id: t-colon-fire-02, rule: colon, fire: true, input: "agenda colon budget then hiring", expected: "agenda: budget then hiring"}
+- {id: t-colon-nofire-01, rule: colon, fire: false, input: "a colon is used before a list", expected: "a colon is used before a list"}
+- {id: t-colon-nofire-02, rule: colon, fire: false, input: "the patient had surgery on his colon last year", expected: "the patient had surgery on his colon last year"}
+
+# ---- new line
+- {id: t-newline-fire-01, rule: new_line, fire: true, position: mid, input: "I live at 5 oak road new line portland oregon", expected: "I live at 5 oak road\nportland oregon"}
+- {id: t-newline-fire-02, rule: new_line, fire: true, position: mid, input: "name new line phone new line email", expected: "name\nphone\nemail"}
+- {id: t-newline-fire-03, rule: new_line, fire: true, position: mid, input: "first item next line second item", expected: "first item\nsecond item"}
+- {id: t-newline-nofire-01, rule: new_line, fire: false, input: "our new line of shoes sold out", expected: "our new line of shoes sold out"}
+- {id: t-newline-nofire-02, rule: new_line, fire: false, input: "he drew a new line on the map", expected: "he drew a new line on the map"}
+
+# ---- new paragraph
+- {id: t-para-fire-01, rule: new_paragraph, fire: true, input: "sincerely yours new paragraph ps remember the deadline", expected: "sincerely yours\n\nps remember the deadline"}
+- {id: t-para-nofire-01, rule: new_paragraph, fire: false, input: "she underlined the new paragraph in the contract", expected: "she underlined the new paragraph in the contract"}
+
+# ---- email
+- {id: t-email-fire-01, rule: email, fire: true, input: "write to s smith at example dot com", expected: "write to ssmith@example.com"}
+- {id: t-email-fire-02, rule: email, fire: true, input: "email jane dot doe at mail dot net", expected: "email jane.doe@mail.net"}
+- {id: t-email-nofire-01, rule: email, fire: false, input: "the talk is at the library at three", expected: "the talk is at the library at three"}
+
+# ---- url
+- {id: t-url-fire-01, rule: url, fire: true, input: "visit docs dot python dot org", expected: "visit docs.python.org"}
+- {id: t-url-fire-02, rule: url, fire: true, input: "see example dot com slash about", expected: "see example.com/about"}
+- {id: t-url-nofire-01, rule: url, fire: false, input: "he joined a dot com startup in 1999", expected: "he joined a dot com startup in 1999"}
+
+# ---- repeated words
+- {id: t-repeat-fire-01, rule: repeated_words, fire: true, input: "we need need more time", expected: "we need more time"}
+- {id: t-repeat-fire-02, rule: repeated_words, fire: true, input: "please send send the file", expected: "please send the file"}
+- {id: t-repeat-nofire-01, rule: repeated_words, fire: false, input: "it was very very good", expected: "it was very very good"}
+- {id: t-repeat-nofire-02, rule: repeated_words, fire: false, input: "bye bye see you tomorrow", expected: "bye bye see you tomorrow"}
+
+# ---- restarts
+- {id: t-restart-fire-01, rule: restart, fire: true, input: "can we can we meet on Friday", expected: "can we meet on Friday"}
+- {id: t-restart-fire-02, rule: restart, fire: true, input: "I want to I want to try the new menu", expected: "I want to try the new menu"}
+- {id: t-restart-nofire-01, rule: restart, fire: false, input: "do what you can with what you have", expected: "do what you can with what you have"}
+- {id: t-restart-nofire-02, rule: restart, fire: false, input: "the sooner you start the sooner you finish", expected: "the sooner you start the sooner you finish"}
+
+# ---- phrase repeats
+- {id: t-phrase-fire-01, rule: phrase_repeat, fire: true, input: "it goes on and on and on and on", expected: "it goes on and on"}
+- {id: t-phrase-fire-02, rule: phrase_repeat, fire: true, input: "we kept going and going and going and going", expected: "we kept going and going"}
+- {id: t-phrase-nofire-01, rule: phrase_repeat, fire: false, input: "bread and butter and jam", expected: "bread and butter and jam"}
+
+# ---- scratch that
+- {id: t-scratch-fire-01, rule: scratch_that, fire: true, input: "the deadline is Friday scratch that the deadline is Monday", expected: "The deadline is Monday"}
+- {id: t-scratch-fire-02, rule: scratch_that, fire: true, input: "Call Priya. Book the room scratch that book the hall.", expected: "Call Priya. Book the hall."}
+- {id: t-scratch-nofire-01, rule: scratch_that, fire: false, input: "she told me not to scratch that", expected: "she told me not to scratch that"}
+- {id: t-scratch-nofire-02, rule: scratch_that, fire: false, input: "strike that match on the box", expected: "strike that match on the box"}
+
+# ---- from the owner's dictation cases (source case number in the note). Not run through normalize
+# before they were written down. Fillers and stutters were trimmed from the phrases.
+- {id: u2-repeat-01, rule: repeated_words, fire: true, input: "the gateway should, should just fall back to the mini", expected: "the gateway should just fall back to the mini", note: "case 2"}
+- {id: u10-url-01, rule: url, fire: false, input: "ruff check dot and then ruff format dash dash check dot", expected: "ruff check dot and then ruff format dash dash check dot", note: "case 10: command mode's job, not normalize's"}
+- {id: u10-url-02, rule: url, fire: false, input: "python three scripts slash golden slash check underscore PR dot py all dash dash base origin slash main", expected: "python three scripts slash golden slash check underscore PR dot py all dash dash base origin slash main", note: "case 10"}
+- {id: u6-url-01, rule: url, fire: false, input: "and the slash V one slash models thing jarvis should be the first one", expected: "and the slash V one slash models thing jarvis should be the first one", note: "case 6"}
+- {id: u5-repeat-01, rule: repeated_words, fire: false, input: "update the status for that, that application", expected: "update the status for that, that application", note: "case 5: 'that that' is exempt from the repeat rule; the model handles the stutter"}
+
+# ---- speech-to-text style input: capitalized, with the punctuation the STT adds around command words
+- {id: t-stt-comma-fire-01, rule: comma, fire: true, position: mid, input: "Dear team, comma, the review moved to Thursday.", expected: "Dear team, the review moved to Thursday."}
+- {id: t-stt-period-fire-01, rule: period, fire: true, position: mid, input: "I pushed the fix, period. Let me know if CI passes.", expected: "I pushed the fix. Let me know if CI passes."}
+- {id: t-stt-qmark-fire-01, rule: question_mark, fire: true, input: "Can you review it today? Question mark.", expected: "Can you review it today?"}
+- {id: t-stt-colon-fire-01, rule: colon, fire: true, input: "Next steps, colon. New line. Merge the PR.", expected: "Next steps:\nMerge the PR."}
+- {id: t-stt-para-fire-01, rule: new_paragraph, fire: true, input: "That covers the budget. New paragraph. The hiring plan is next.", expected: "That covers the budget.\n\nThe hiring plan is next."}
+- {id: t-stt-fullstop-fire-01, rule: full_stop, fire: true, input: "Send it by Friday, full stop.", expected: "Send it by Friday."}
+- {id: t-stt-comma-nofire-01, rule: comma, fire: false, input: "Do I need the Oxford comma here?", expected: "Do I need the Oxford comma here?"}
+- {id: t-stt-comma-nofire-02, rule: comma, fire: false, input: "Remove that extra comma, please.", expected: "Remove that extra comma, please."}
+- {id: t-stt-qmark-nofire-01, rule: question_mark, fire: false, input: "Is that question mark supposed to be there?", expected: "Is that question mark supposed to be there?"}
+- {id: t-stt-newline-nofire-01, rule: new_line, fire: false, input: "Our new line of headphones ships in May.", expected: "Our new line of headphones ships in May."}
+- {id: t-stt-period-nofire-01, rule: period, fire: false, input: "It was a quiet period, so we caught up on reviews.", expected: "It was a quiet period, so we caught up on reviews."}
