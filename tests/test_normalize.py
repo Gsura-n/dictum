@@ -99,7 +99,9 @@ def test_command_mode_falls_back_for_long_input():
     class FakeRefiner:
         name = "fake"
         def refine(self, t, mode):
-            return Refined(text=mode.name, backend="fake", mode=mode.name, latency_s=0, source=t)
+            # "echo" is a shell word, so looks_like_command passes without depending on what is on PATH
+            return Refined(text="echo hi" if mode.name == "command" else mode.name,
+                           backend="fake", mode=mode.name, latency_s=0, source=t)
 
     cfg = Config.load()
     p = Pipeline(capture=None, stt=None, refiner=FakeRefiner(), injector=None, cfg=cfg)
