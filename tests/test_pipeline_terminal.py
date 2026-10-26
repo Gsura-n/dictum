@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
+from dictum import dictionary as dict_mod
 from dictum.config import Config
 from dictum.pipeline import Pipeline
 from dictum.types import AudioClip, Refined, Transcript
@@ -142,6 +143,34 @@ def test_process_skips_empty_and_one_word_transcripts(raw, contract_config):
     assert refined.text == raw
     assert refined.source.text == raw
     assert refined.backend == "skipped"
+
+
+@pytest.mark.parametrize("entry_source", ["config", "refiner", "uninitialized", "empty"])
+@pytest.mark.parametrize("raw", ["zorin", "hello", "", " \t\n"])
+def test_process_skip_applies_dictionary_without_refining(raw, entry_source, contract_config):
+    dictionary = [{"word": "Zoryn", "sounds_like": ["zorin"]}]
+    contract_config.raw["dictionary"] = dictionary
+    refiner = FakeRefiner(out="must not be used")
+    if entry_source == "refiner":
+        refiner.entries = dict_mod.parse(dictionary)
+        # Eval overrides must take precedence over the configured dictionary.
+        contract_config.raw["dictionary"] = [{"word": "Other", "sounds_like": ["zorin"]}]
+    elif entry_source == "uninitialized":
+        refiner.entries = None
+    elif entry_source == "empty":
+        refiner.entries = []
+    pipe, inj = make(raw, refiner, contract_config)
+
+    refined, _ = pipe.process(CLIP, "dictation_ft")
+
+    changed = raw == "zorin" and entry_source != "empty"
+    expected = "Zoryn" if changed else raw
+    assert refiner.calls == []
+    assert inj.pasted == [expected]
+    assert refined.text == expected
+    assert refined.source.text == raw
+    assert refined.backend == "skipped"
+    assert refined.notes == (["dictionary applied"] if changed else [])
 
 
 @pytest.mark.parametrize("error", [RuntimeError("model unavailable"), TimeoutError("timed out")])
