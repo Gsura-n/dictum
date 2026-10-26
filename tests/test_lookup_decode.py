@@ -163,7 +163,7 @@ def test_offset_is_back_at_the_prefix_after_an_exception():
 # ---- config and the real model ----------------------------------------------------------------------------
 def test_config_defaults():
     mlx = yaml.safe_load(DEFAULT_PATH.read_text())["refine"]["mlx"]
-    assert (mlx["lookup_decoding"], mlx["lookup_ngram"], mlx["lookup_draft_tokens"]) == (False, 2, 4)
+    assert (mlx["lookup_decoding"], mlx["lookup_ngram"], mlx["lookup_draft_tokens"]) == (True, 2, 4)
 
 
 def test_real_model_lookup_equals_plain():
