@@ -36,6 +36,9 @@ refine:
     use_personal: true                           # prefer ~/.dictum/adapters/personal when it exists
     max_tokens: 300
     prefix_cache: true                           # reuse the prefilled system prompt and examples between calls
+    lookup_decoding: true                        # draft tokens by copying from the prompt; same output, faster
+    lookup_ngram: 2                              # tokens matched in the context before drafting
+    lookup_draft_tokens: 4                       # tokens proposed per step
 
 # Local history of dictations, needed for `dictum correct` and `dictum personalize`.
 # Stored only in ~/.dictum/history.db. Off by default.
