@@ -35,6 +35,7 @@ refine:
     adapter_fallback: hf:Gsura-n/dictum-dictation-llama3.2-3b-lora   # published adapter, downloaded once
     use_personal: true                           # prefer ~/.dictum/adapters/personal when it exists
     max_tokens: 300
+    prefix_cache: true                           # reuse the prefilled system prompt and examples between calls
 
 # Local history of dictations, needed for `dictum correct` and `dictum personalize`.
 # Stored only in ~/.dictum/history.db. Off by default.
