@@ -50,7 +50,8 @@ def lookup(rule, ids, max_tokens, eos, ngram=2, k=4, stats=None):
 
 
 def mixed(h):                  # depends on three tokens, so a two-token lookup is right only some of the time
-    return 1 + (h[-1] * 5 + h[-2] * 3 + h[-3]) % 9
+    a, b, c = ([0, 0] + h)[-1], ([0, 0] + h)[-2], ([0, 0] + h)[-3]
+    return 1 + (a * 5 + b * 3 + c) % 9
 
 
 # ---- drafting ---------------------------------------------------------------------------------------------
@@ -102,13 +103,15 @@ def test_cache_holds_exactly_the_committed_tokens_after_rejections():
 
 
 def test_draft_is_cut_at_max_tokens():
-    out, lm = lookup(lambda h: 5, [5, 5, 5, 5], 3, set(), k=4)
-    assert out == [5, 5, 5]
-    assert len(lm.cache) == 4 + 3              # a draft longer than the tokens left would have been fed too
+    period8 = lambda h: h[len(h) - 8] if len(h) >= 8 else 0  # noqa: E731
+    ids = list(range(1, 9)) * 3
+    out, lm = lookup(period8, ids, 3, set(), k=4)
+    assert out == [1, 2, 3]
+    assert len(lm.cache) == len(ids) + 3             # a draft longer than the tokens left would have been fed too
 
 
 def test_eos_inside_a_draft_stops_there():
-    copy = lambda h: h[len(h) - 4]             # repeats the prompt 4 5 6 9, and 9 is EOS  # noqa: E731
+    copy = lambda h: h[len(h) - 4] if len(h) >= 4 else 0             # repeats the prompt 4 5 6 9, and 9 is EOS  # noqa: E731
     stats = LookupStats()
     out, _ = lookup(copy, [4, 5, 6, 9], 20, {9}, stats=stats)
     assert out == [4, 5, 6] == greedy(copy, [4, 5, 6, 9], 20, {9})

@@ -6,6 +6,7 @@ thread, so create and use this on the same thread (the app's processor thread).
 """
 from __future__ import annotations
 
+import logging
 import time
 
 from .. import dictionary as dict_mod
@@ -13,7 +14,10 @@ from ..config import Mode
 from ..types import Refined, Transcript
 from .common import refine_with
 from .ollama_refiner_utils import build_messages
+from .lookup_decode import LookupStats, lookup_generate
 from .prefix_cache import PrefixCache, split_prompt
+
+log = logging.getLogger(__name__)
 
 
 class MLXRefiner:
@@ -21,7 +25,8 @@ class MLXRefiner:
 
     def __init__(self, model="mlx-community/Llama-3.2-3B-Instruct-4bit", adapter_path=None,
                  max_tokens=300, dictionary=None, normalize=None, adapter_fallback=None,
-                 use_personal=True, prefix_cache=True, **_):
+                 use_personal=True, prefix_cache=True, lookup_decoding=False, lookup_ngram=2,
+                 lookup_draft_tokens=4, **_):
         self.model_id, self.max_tokens = model, max_tokens
         # Local adapter if it exists, else the published one, else the base model.
         from ..adapters import resolve
@@ -29,6 +34,7 @@ class MLXRefiner:
         self.entries = dict_mod.parse(dictionary)
         self.normalize_cfg = normalize
         self._model = self._tok = None
+        self.lookup, self.lookup_stats = (lookup_decoding, lookup_ngram, lookup_draft_tokens), LookupStats()
         self.prefix_cache = PrefixCache(make_cache=self._make_cache, prefill=self._prefill_prefix,
                                         offset=lambda c: c[0].offset, trim=self._trim_cache,
                                         can_trim=self._can_trim, enabled=prefix_cache)
@@ -71,6 +77,29 @@ class MLXRefiner:
         bos = self._tok.bos_token
         return self._tok.encode(text, add_special_tokens=bos is None or not text.startswith(bos))
 
+    def _lookup_text(self, ids, cache, max_tokens: int) -> str:
+        """Greedy generation with drafts copied from the context (lookup_decode.py), same text as stream_generate."""
+        import mlx.core as mx
+        from mlx_lm.generate import generation_stream
+
+        def forward(tokens, n_out):
+            with mx.stream(generation_stream):
+                while len(tokens) > max(512, n_out):      # long prompts in chunks, as mlx_lm does
+                    self._model(mx.array(tokens[:512])[None], cache=cache)
+                    mx.eval([c.state for c in cache])
+                    tokens = tokens[512:]
+                return mx.argmax(self._model(mx.array(tokens)[None], cache=cache)[0, -n_out:], axis=-1).tolist()
+
+        on, ngram, k = self.lookup
+        out = lookup_generate(forward, lambda n: self._trim_cache(cache, n), list(ids), max_tokens=max_tokens,
+                              eos=set(self._tok.eos_token_ids), ngram=ngram, draft_tokens=k, stats=self.lookup_stats)
+        detok = self._tok.detokenizer
+        detok.reset()
+        for t in out:
+            detok.add_token(t)
+        detok.finalize()
+        return detok.text
+
     def _generate(self, mode: Mode, text: str, max_tokens: int) -> str:
         from mlx_lm import stream_generate
         from mlx_lm.sample_utils import make_sampler
@@ -85,6 +114,11 @@ class MLXRefiner:
         sampler = make_sampler(temp=0.0)
 
         def gen(ids, cache):
+            if self.lookup[0]:
+                c = self._make_cache() if cache is None else cache
+                if self._can_trim(c):
+                    return self._lookup_text(ids, c, max_tokens)
+                log.debug("lookup decoding skipped for this call: the cache cannot be trimmed")
             extra = {} if cache is None else {"prompt_cache": cache}
             return "".join(r.text for r in stream_generate(self._model, self._tok, prompt=ids,
                                                            max_tokens=max_tokens, sampler=sampler, **extra))
