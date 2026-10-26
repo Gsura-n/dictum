@@ -32,6 +32,7 @@ import resource
 import subprocess
 import sys
 import time
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -131,6 +132,27 @@ def pct(xs: list[float], p: float) -> float:
     return float(np.percentile(xs, p)) if xs else 0.0
 
 
+def prefix_cache_stats(refiner) -> dict | None:
+    """Sum counters from each refiner and its already-created router backends."""
+    pending, seen = [refiner], set()
+    hits = misses = 0
+    reasons = Counter()
+    found = False
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        cache = getattr(current, "prefix_cache", None)
+        if cache is not None:
+            found = True
+            hits += cache.hits
+            misses += cache.misses
+            reasons.update(cache.miss_reasons)
+        pending.extend(getattr(current, "_backends", {}).values())
+    return {"hits": hits, "misses": misses, "miss_reasons": dict(reasons)} if found else None
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--mode", help="mode to measure (default: what Right Option uses outside terminals)")
@@ -175,6 +197,7 @@ def main() -> None:
                for k in ("stt_s", "refine_s", "total_s")}
     summary["audio_s_mean"] = round(float(np.mean(col("audio_s"))), 1)
     summary["failed"] = sum(str(r["backend"]).startswith("failed") for r in rows)
+    summary["prefix_cache"] = prefix_cache_stats(pipe.refiner)
 
     result = {"timestamp": datetime.now().isoformat(timespec="seconds"), "machine": machine(), "mode": mode,
               "warm_modes": list(warm), "note": a.note, "load_s": round(load_s, 1), "load": load,
@@ -192,6 +215,11 @@ def main() -> None:
     print(f"  memory  rss {mem_end['rss_mb']} MB (peak {mem_end['peak_rss_mb']}), "
           f"mlx peak {mem_end.get('mlx_peak_mb', '?')} MB")
     print(f"  footprint {mem_end['footprint']}")
+    stats = summary["prefix_cache"]
+    if stats is not None:
+        reasons = ", ".join(f"{reason}: {count}" for reason, count in sorted(stats["miss_reasons"].items()))
+        print(f"prefix cache: {stats['hits']} hits, {stats['misses']} miss{'es' if stats['misses'] != 1 else ''}"
+              f"{f' ({reasons})' if reasons else ''}")
     if ollama:
         print(ollama)
     print(f"saved {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}")
