@@ -9,6 +9,17 @@ def test_clean_output_strips_think_fences_quotes():
     assert clean_output("plain") == "plain"
 
 
+def test_clean_output_strips_preamble():
+    # Academic example
+    assert clean_output("Here is the rewritten text in formal academic prose:\n\nThe real text.") == "The real text."
+    # Sure! Here's...
+    assert clean_output("Sure! Here's the cleaned text:\n\nSend it Thursday.") == "Send it Thursday."
+    # A real sentence ending in a colon that is the whole output is kept
+    assert clean_output("A real sentence:") == "A real sentence:"
+    # One line, text after the colon is kept
+    assert clean_output("Here is the plan: ship Friday.") == "Here is the plan: ship Friday."
+
+
 def test_build_messages_includes_examples_and_dictionary():
     mode = Mode(name="t", prompt="Do X.", examples=[{"in": "a", "out": "b"}])
     msgs = build_messages(mode, "hello", ["Gauttam"])
