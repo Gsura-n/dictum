@@ -92,7 +92,12 @@ class Pipeline:
         reason = flatten() if flatten else None
         if reason:
             safe = terminal_safe(refined.text)
-            if safe != refined.text:
+            if not safe and transcript.text.strip():
+                safe = terminal_safe(transcript.text)
+                refined.text = safe
+                refined.notes.append(NOTES[reason])
+                refined.notes.append("output empty after flattening; used raw transcript")
+            elif safe != refined.text:
                 refined.text = safe
                 refined.notes.append(NOTES[reason])
         self.injector.inject(refined.text)
