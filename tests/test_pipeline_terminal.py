@@ -121,6 +121,30 @@ def test_no_note_when_terminal_text_already_single_line():
     assert inj.pasted == ["Send the draft."] and refined.notes == []
 
 
+def test_terminal_target_strips_unsafe_text_to_empty():
+    pipe, inj = make("some words", FakeRefiner(out="\n\n\x1b"))
+    pipe.cfg.raw["history"] = {"enabled": True}
+    refined, _ = pipe.process(CLIP, "dictation_ft", lambda: "terminal")
+
+    assert inj.pasted == [""]
+    assert refined.text == ""
+    assert any("terminal" in note for note in refined.notes)
+    # history skips empty text
+    assert not any("history" in note for note in refined.notes)
+
+
+def test_terminal_target_strips_spaces_to_empty():
+    pipe, inj = make("some words", FakeRefiner(out="   \n  \n "))
+    pipe.cfg.raw["history"] = {"enabled": True}
+    refined, _ = pipe.process(CLIP, "dictation_ft", lambda: "terminal")
+
+    assert inj.pasted == [""]
+    assert refined.text == ""
+    assert any("terminal" in note for note in refined.notes)
+    # history skips empty text
+    assert not any("history" in note for note in refined.notes)
+
+
 def test_history_records_the_pasted_text(monkeypatch):
     from dictum import history
     seen = []
