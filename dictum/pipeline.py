@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from . import dictionary as dict_mod
 from .capture import AudioCapture, SoundDeviceCapture
 from .config import Config
 from .inject import Injector, create_injector
@@ -72,8 +73,15 @@ class Pipeline:
         if len(transcript.text.split()) < 2:
             # Nothing (or one word) to clean up. Never hand an LLM an empty
             # prompt: it will happily invent a sentence.
-            refined = Refined(text=transcript.text, backend="skipped", mode=mode_name or "",
-                              latency_s=0.0, source=transcript)
+            text = transcript.text
+            if text.strip():
+                entries = getattr(self.refiner, "entries", None)
+                if entries is None:
+                    entries = dict_mod.parse(self.cfg.dictionary)
+                text = dict_mod.apply(text, entries)
+            notes = ["dictionary applied"] if text != transcript.text else []
+            refined = Refined(text=text, backend="skipped", mode=mode_name or "",
+                              latency_s=0.0, source=transcript, notes=notes)
         else:
             try:
                 refined = self.refine_text(transcript, mode_name)
