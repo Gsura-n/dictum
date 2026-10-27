@@ -20,6 +20,28 @@ from . import guards
 from .ollama_refiner_utils import clean_output
 
 
+import re
+
+def strip_preamble(text: str, source: str) -> str:
+    prefixes = ("Here is", "Here's", "Sure", "Certainly", "Okay", "Below is")
+    if text.startswith(prefixes):
+        lines = text.split("\n")
+        if len(lines) > 1 and lines[0].strip().endswith(":"):
+            if any(line.strip() for line in lines[1:]):
+                # Count words in preamble line that appear in source
+                preamble_words = re.findall(r'\b\w+\b', lines[0].lower())
+                if preamble_words:
+                    source_words = set(re.findall(r'\b\w+\b', source.lower()))
+                    match_count = sum(1 for w in preamble_words if w in source_words)
+
+                    # If fewer than half the words are in source, it's generated preamble
+                    if match_count < len(preamble_words) / 2:
+                        if not lines[1].strip():
+                            return "\n".join(lines[2:])
+                        else:
+                            return "\n".join(lines[1:])
+    return text
+
 def refine_with(generate: Callable[[Mode, str], str], name: str, transcript: Transcript, mode: Mode,
                 entries, normalize_cfg: dict | None) -> Refined:
     t0 = time.perf_counter()
@@ -45,6 +67,7 @@ def refine_with(generate: Callable[[Mode, str], str], name: str, transcript: Tra
         for piece in normalize.chunk(seg, mode.chunk_words):
             n_chunks += 1
             raw = clean_output(generate(mode, piece))
+            raw = strip_preamble(raw, piece)
             raw = dict_mod.apply(raw, entries)
             text, reason = guards.check(mode.guard, piece, raw)
             if reason:

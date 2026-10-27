@@ -16,17 +16,6 @@ def clean_output(text: str) -> str:
     text = _TAGS.sub("", text).strip()
     if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
         text = text[1:-1].strip()
-
-    prefixes = ("Here is", "Here's", "Sure", "Certainly", "Okay", "Below is")
-    if text.startswith(prefixes):
-        lines = text.split("\n")
-        if len(lines) > 1 and lines[0].strip().endswith(":"):
-            if any(line.strip() for line in lines[1:]):
-                if not lines[1].strip():
-                    text = "\n".join(lines[2:])
-                else:
-                    text = "\n".join(lines[1:])
-
     return text
 
 
