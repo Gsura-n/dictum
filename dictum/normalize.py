@@ -41,8 +41,15 @@ _NOUN_BEFORE = {"the", "a", "an", "this", "that", "these", "those", "my", "our",
                 "oxford", "extra", "missing", "stray", "trailing", "serial", "another", "every", "each"}
 _NOUN_AFTER = {"splice", "key", "character", "symbol", "button", "placement"}
 
+_NUMBER_WORDS = {
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+    "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+    "hundred", "thousand"
+}
+
 # words that may legitimately repeat
-_ALLOWED_REPEATS = {"had", "that", "bye", "ha", "no", "very", "so"}
+_ALLOWED_REPEATS = {"had", "that", "bye", "ha", "no", "very", "so"} | _NUMBER_WORDS
 
 
 def _noun_use(text: str, start: int, end: int) -> bool:
@@ -197,6 +204,8 @@ _PHRASE_RUN = re.compile(r"\b(\w+(?:\s+\w+){0,2})((?:\s+(and|or)\s+\1\b){2,})", 
 
 def reduce_phrase_repeats(text: str) -> str:
     def rep(m: re.Match) -> str:
+        if all(w in _NUMBER_WORDS for w in m.group(1).lower().split()):
+            return m.group(0)
         return f"{m.group(1)} {m.group(3)} {m.group(1)}"
     return _PHRASE_RUN.sub(rep, text)
 

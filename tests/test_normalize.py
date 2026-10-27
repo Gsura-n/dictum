@@ -29,6 +29,14 @@ def test_repeats():
     assert n.collapse_repeats("I had had enough") == "I had had enough"
 
 
+def test_number_repeats():
+    assert n.collapse_repeats("according to Smith and Lee twenty twenty three") == "according to Smith and Lee twenty twenty three"
+    assert n.collapse_repeats("nineteen nineteen") == "nineteen nineteen"
+    assert n.collapse_repeats("call four four five one") == "call four four five one"
+    assert n.collapse_repeats("the the plan") == "the plan"
+    assert n.collapse_repeats("I I I think") == "I think"
+
+
 def test_refine_flow_with_fake_model():
     from dictum.config import Config
     from dictum.dictionary import parse
@@ -156,6 +164,8 @@ def test_collapse_restarts(raw, want):
     ("it goes on and on", "it goes on and on"),
     ("tea or coffee or juice", "tea or coffee or juice"),
     ("salt and pepper and olive oil", "salt and pepper and olive oil"),
+    # numbers
+    ("twenty and twenty and twenty", "twenty and twenty and twenty"),
 ])
 def test_reduce_phrase_repeats(raw, want):
     assert n.reduce_phrase_repeats(raw) == want
