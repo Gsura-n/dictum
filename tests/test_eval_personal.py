@@ -70,6 +70,8 @@ def audio(root, cid="P1", seconds=1, sr=16000, channels=1):
     ("command", "read", "ls -la", ["pwd", "ls -a -l"], True),
     ("command", "read", "git checkout -b 'Lookup Decoding'", ["git checkout -b lookup-decoding"], False),
     ("command", "read", "rm -rf /tmp/x", ["rm -rf /"], False),
+    ("command", "read", "cp a b", ["cp b a"], False),
+    ("command", "read", "cat log.txt | grep error", ["grep error | cat log.txt"], False),
 ])
 def test_scores_real_pipeline_output(tmp_path, pipeline, mode, kind, out, expect, passed):
     audio(tmp_path)

@@ -33,6 +33,20 @@ MODES = ("dictation_ft", "command", "academic")
 GROUPS = "PETCNXAQ"
 
 
+def expand(text):
+    try:
+        tokens = shlex.split(text)
+    except ValueError:
+        return []
+    expanded = []
+    for t in tokens:
+        if t.startswith("-") and not t.startswith("--") and len(t) > 2:
+            expanded.extend(f"-{c}" for c in t[1:])
+        else:
+            expanded.append(t)
+    return expanded
+
+
 def load_suite(root: Path, only: str | None = None, mode: str | None = None) -> list[dict]:
     for path in (root, root / "clips.yaml", root / "references.yaml"):
         ensure_outside_repo(path)
@@ -138,25 +152,18 @@ def evaluate(clips, root: Path, pipe=None) -> tuple[list[dict], dict]:
             row["stt_wer"] = wer(normalize_numbers(row["raw"]), normalize_numbers(c["said"]))
             out, expect = result.text, c["expect"]
             if c["mode"] == "command":
-                def expand(text):
-                    try:
-                        tokens = shlex.split(text)
-                    except ValueError:
-                        return []
-                    expanded = []
-                    for t in tokens:
-                        if t.startswith("-") and not t.startswith("--") and len(t) > 2:
-                            expanded.extend(f"-{c}" for c in t[1:])
-                        else:
-                            expanded.append(t)
-                    return expanded
-
                 passed = False
                 for cmd in expect:
                     if out.strip() == cmd:
                         passed = True
                         break
-                    if sorted(expand(out)) == sorted(expand(cmd)):
+                    out_exp = expand(out)
+                    cmd_exp = expand(cmd)
+                    out_flags = [t for t in out_exp if t.startswith("-")]
+                    out_non_flags = [t for t in out_exp if not t.startswith("-")]
+                    cmd_flags = [t for t in cmd_exp if t.startswith("-")]
+                    cmd_non_flags = [t for t in cmd_exp if not t.startswith("-")]
+                    if sorted(out_flags) == sorted(cmd_flags) and out_non_flags == cmd_non_flags:
                         passed = True
                         break
                 row["passed"] = passed
