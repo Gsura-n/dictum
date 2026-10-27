@@ -75,7 +75,9 @@ class Config:
     @property
     def dictionary(self) -> list:
         """Raw entries: strings or {word, sounds_like}. Parse with dictum.dictionary.parse."""
-        return list(self.raw.get("dictionary", []) or [])
+        base = list(self.raw.get("dictionary", []) or [])
+        add = list(self.raw.get("dictionary_add", []) or [])
+        return base + add
 
     @property
     def mode_names(self) -> list[str]:

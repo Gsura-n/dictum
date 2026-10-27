@@ -84,7 +84,22 @@ apps:
 # Personal dictionary. Plain words are listed in the prompt. Words with
 # sounds_like are also fixed in code before the LLM runs, which is far more
 # reliable than asking a small model to respell things.
+# To add words locally without replacing this whole list, use dictionary_add:
 dictionary:
+  - word: LiteLLM
+    sounds_like: [light lm, lite lm, light llm]
+  - word: LoRA
+    sounds_like: [lora]
+  - word: Llama
+    sounds_like: [lama]
+  - word: gitleaks
+    sounds_like: [git leaks]
+  - word: pytest
+    sounds_like: [pie test, py test]
+  - word: Claude Code
+    sounds_like: [cloud code, clawed code]
+  - word: Neo4j
+    sounds_like: [neo four j, neo 4 j]
   - word: Gauttam
     sounds_like: [gautam, gowtham, gotham]
   # Common tech terms that speech recognition splits or lowercases. Only

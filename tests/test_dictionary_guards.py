@@ -44,3 +44,19 @@ def test_looks_like_command():
     assert not looks_like_command("dictation")
     assert not looks_like_command("Sure, here is the command")
     assert not looks_like_command("")
+
+def test_sounds_like_new_tech_terms():
+    e = d.parse([
+        {"word": "LiteLLM", "sounds_like": ["light lm", "lite lm", "light llm"]},
+        {"word": "LoRA", "sounds_like": ["lora"]},
+        {"word": "Llama", "sounds_like": ["lama"]},
+        {"word": "gitleaks", "sounds_like": ["git leaks"]},
+        {"word": "pytest", "sounds_like": ["pie test", "py test"]},
+        {"word": "Claude Code", "sounds_like": ["cloud code", "clawed code"]},
+        {"word": "Neo4j", "sounds_like": ["neo four j", "neo 4 j"]},
+    ])
+    assert d.apply("trained on lama three point two", e) == "trained on Llama three point two"
+    assert d.apply("the cloud is down", e) == "the cloud is down"
+    assert d.apply("running py test", e) == "running pytest"
+    assert d.apply("we use cloud code", e) == "we use Claude Code"
+    assert d.apply("neo 4 j database", e) == "Neo4j database"

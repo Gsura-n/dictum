@@ -22,3 +22,15 @@ def test_passthrough_refiner():
     t = Transcript(text="hello", engine="x", latency_s=0.1, audio_s=1.0)
     r = Passthrough().refine(t, cfg.mode("dictation"))
     assert r.text == "hello" and r.mode == "dictation"
+
+def test_config_dictionary_add():
+    cfg = Config(raw={"dictionary": [{"word": "A"}], "dictionary_add": [{"word": "B"}]})
+    assert cfg.dictionary == [{"word": "A"}, {"word": "B"}]
+
+def test_config_dictionary_override():
+    cfg = Config(raw={"dictionary": [{"word": "C"}]})
+    assert cfg.dictionary == [{"word": "C"}]
+
+def test_config_dictionary_add_only():
+    cfg = Config(raw={"dictionary_add": [{"word": "D"}]})
+    assert cfg.dictionary == [{"word": "D"}]
