@@ -15,6 +15,38 @@ def test_history_roundtrip(tmp_path: Path):
     assert history.clear(db=db) == 1
 
 
+def test_history_training_pairs_edge_cases(tmp_path: Path):
+    db = tmp_path / "h2.db"
+
+    # 1. Ignore uncorrected records
+    i1 = history.record("uncorrected transcript", "uncorrected output", "dictation", db=db)
+
+    # 2. Modes filtering
+    i2 = history.record("wrong mode transcript", "wrong mode output", "command", db=db)
+    history.correct(i2, "wrong mode corrected", db=db)
+
+    # 3. Valid records for ordering and mode matching
+    i3 = history.record("t2", "o2", "dictation", db=db)
+    history.correct(i3, "c2", db=db)
+
+    i4 = history.record("t1", "o1", "dictation_ft", db=db)
+    history.correct(i4, "c1", db=db)
+
+    pairs = history.training_pairs(db=db)
+
+    # Should only contain i3 and i4, ordered by id
+    assert len(pairs) == 2
+    assert pairs[0]["id"] == i3
+    assert pairs[0]["src"] == "t2"
+    assert pairs[0]["tgt"] == "c2"
+    assert pairs[1]["id"] == i4
+
+    # Specific mode filtering
+    assert len(history.training_pairs(modes=("dictation",), db=db)) == 1
+    assert history.training_pairs(modes=("dictation",), db=db)[0]["id"] == i3
+
+
+
 def test_router_dispatches_by_mode():
     built = []
 
