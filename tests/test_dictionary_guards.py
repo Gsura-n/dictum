@@ -46,15 +46,10 @@ def test_looks_like_command():
     assert not looks_like_command("")
 
 def test_sounds_like_new_tech_terms():
-    e = d.parse([
-        {"word": "LiteLLM", "sounds_like": ["light lm", "lite lm", "light llm"]},
-        {"word": "LoRA", "sounds_like": ["lora"]},
-        {"word": "Llama", "sounds_like": ["lama"]},
-        {"word": "gitleaks", "sounds_like": ["git leaks"]},
-        {"word": "pytest", "sounds_like": ["pie test", "py test"]},
-        {"word": "Claude Code", "sounds_like": ["cloud code", "clawed code"]},
-        {"word": "Neo4j", "sounds_like": ["neo four j", "neo 4 j"]},
-    ])
+    from dictum.config import DEFAULT_PATH
+    import yaml
+    raw = yaml.safe_load(DEFAULT_PATH.read_text())["dictionary"]
+    e = d.parse(raw)
     assert d.apply("trained on lama three point two", e) == "trained on Llama three point two"
     assert d.apply("the cloud is down", e) == "the cloud is down"
     assert d.apply("running py test", e) == "running pytest"
