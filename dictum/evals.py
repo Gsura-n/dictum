@@ -169,6 +169,54 @@ def _norm_words(s: str) -> list[str]:
     return re.findall(r"[a-z0-9']+", s.lower().replace("’", "'"))
 
 
+_SMALL_NUMBERS = (
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen "
+    "fourteen fifteen sixteen seventeen eighteen nineteen"
+).split()
+_TENS = "zero ten twenty thirty forty fifty sixty seventy eighty ninety".split()
+_SCALES = ((10**12, "trillion"), (10**9, "billion"), (10**6, "million"), (1000, "thousand"), (100, "hundred"))
+_DIGIT_WORD = "(?:" + "|".join(_SMALL_NUMBERS[:10]) + ")"
+_NUMBER_WORD = "(?:" + "|".join([*_SMALL_NUMBERS, *_TENS[2:]]) + ")"
+
+
+def _cardinal(n: int) -> str:
+    if n < 20:
+        return _SMALL_NUMBERS[n]
+    for scale, word in _SCALES:
+        if n >= scale:
+            whole, rest = divmod(n, scale)
+            return f"{_cardinal(whole)} {word}" + (f" {_cardinal(rest)}" if rest else "")
+    tens, units = divmod(n, 10)
+    return _TENS[tens] + (f" {_SMALL_NUMBERS[units]}" if units else "")
+
+
+def normalize_numbers(text: str) -> str:
+    """Canonical words for comparing personal STT transcripts, never for pasted text.
+
+    Expands nonnegative integers below 10**15 and decimals digit by digit,
+    ignores a leading decimal zero, and removes optional 'and' after scales.
+    Handles p50 and 4-bit; leaves other alphanumeric identifiers intact.
+    Like WER, ignores case/punctuation. Year-style 'twenty twenty three' is
+    deliberately unhandled. Longer digit runs stay literal (e.g. identifiers).
+    Work is linear in input length; cardinal recursion is bounded by 15 digits.
+    """
+    def expand(match: re.Match) -> str:
+        whole, dot, fraction = match.group().partition(".")
+        if len(whole) > 15:
+            return match.group()
+        words = _cardinal(int(whole or "0"))
+        if dot:
+            words += " point " + " ".join(_SMALL_NUMBERS[int(d)] for d in fraction)
+        return words
+
+    text = re.sub(r"\bp(?=[0-9])", "p ", text.lower())
+    text = re.sub(r"(?<![\w.])(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?!\w)", expand, text)
+    text = " ".join(_norm_words(text))
+    scales = "|".join(word for _, word in _SCALES)
+    text = re.sub(rf"\b({scales}) and (?={_NUMBER_WORD}\b)", r"\1 ", text)
+    return re.sub(rf"(?<!zero )\b(?:zero )+point (?={_DIGIT_WORD}\b)", "point ", text)
+
+
 def similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, _words(a), _words(b)).ratio() if a and b else 0.0
 
