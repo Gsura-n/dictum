@@ -1,8 +1,7 @@
 from pathlib import Path
 
 from dictum import history
-from dictum.config import Config, Mode
-from dictum.refine import create_refiner
+from dictum.config import Mode
 
 
 def test_history_roundtrip(tmp_path: Path):
