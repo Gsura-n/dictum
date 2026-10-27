@@ -267,6 +267,28 @@ def test_command_prose_falls_back_to_dictation(entrypoint, contract_config):
     assert any("not a runnable command" in note and "dictation_ft" in note for note in refined.notes)
 
 
+def test_model_fallback_error_injects_raw_transcript(contract_config):
+    raw = "list these files"
+    prose = "Here are the files.\nThey are listed below."
+
+    class FailingFallbackRefiner(FakeRefiner):
+        def refine(self, transcript, mode):
+            if mode.name == "dictation_ft":
+                raise RuntimeError("fallback model unavailable")
+            return super().refine(transcript, mode)
+
+    refiner = FailingFallbackRefiner(out={"command": prose})
+    pipe, inj = make(raw, refiner, contract_config)
+
+    refined, _ = pipe.process(CLIP, "command")
+
+    assert inj.pasted == [raw]
+    assert refined.text == raw
+    assert refined.source.text == raw
+    assert refined.backend.startswith("failed")
+    assert "fallback model unavailable" in refined.backend
+
+
 @pytest.mark.parametrize("raw, fail, refine_s", [
     ("send the draft", False, 0.25),
     ("hello", False, 0.0),
