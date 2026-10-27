@@ -75,7 +75,7 @@ def test_scores_real_pipeline_output(tmp_path, pipeline, mode, out, expect, pass
     assert (row["stt_s"], row["refine_s"], row["total_s"]) == (0.25, 0.5, 1)
     assert models[mode]["adapter"] == "fake-adapter" and models[mode]["model"] == "fake-model"
     if mode != "command":
-        assert row["paste_similarity"] >= 0 and row["paste_wer"] == (1 if out.startswith("entirely") else 0)
+        assert row["paste_similarity"] >= 0 and row["paste_wer"] == (1.5 if out.startswith("entirely") else 0)
     elif not passed:
         assert row["command_score"] == command_score(out, expect[0])
 
@@ -106,7 +106,7 @@ def manifest(root, clips=None, refs=None):
     (root / "references.yaml").write_text(yaml.safe_dump(refs if refs is not None else {"P1": case()}))
 
 
-@pytest.mark.parametrize("clips,refs", [([], {}), ([case(), case()], {}),
+@pytest.mark.parametrize("clips,refs", [([], {}), ([case(), case()], {}), ([None], {}), ([case()], []),
     ([case("../P1")], {}), ([case(mode="other")], {}), ([dict(case(), kind="other")], {}),
     ([case()], {}), ([case()], {"P1": {"said": 3, "expect": "x"}}),
     ([case()], {"P1": {"said": "x", "expect": ["x"]}}),
@@ -131,6 +131,10 @@ def test_group_and_overall_math():
     assert s["latency_le15s"]["total_s"] == {"p50": 3, "p95": 3}
     assert summary["P"]["paste_pass_rate"] == .5 and summary["C"]["failed"] == 1
     assert summary["Q"]["n"] == 0 and summary["Q"]["mean_stt_wer"] is None
+    for n in range(len(rows) + 1):
+        s = ep.summarize(rows[:n])
+        assert s["overall"]["n"] == sum(s[g]["n"] for g in ep.GROUPS) == n
+        assert s["overall"]["paste_pass_rate"] == (sum(r["passed"] for r in rows[:n])/n if n else None)
 
 
 def test_main_filters_saves_and_prints_models_and_latency(tmp_path, pipeline, monkeypatch, capsys):
@@ -156,3 +160,26 @@ def test_refuses_repo_and_results_symlink_into_repo(tmp_path, monkeypatch):
         monkeypatch.setattr("sys.argv", ["eval_personal", "--dir", str(root)])
         with pytest.raises((ValueError, SystemExit), match="repo"):
             ep.main()
+
+
+@pytest.mark.parametrize("phase", ["startup", "metadata"])
+def test_setup_failures_are_recorded(tmp_path, pipeline, phase):
+    audio(tmp_path)
+    target, attr = (pipeline.stt, "load") if phase == "startup" else (pipeline.refiner, "model_for")
+    setattr(target, attr, Mock(side_effect=RuntimeError("unavailable")))
+    (row,), models = ep.evaluate([case()], tmp_path, pipeline)
+    assert ("unavailable" in row["error"]) if phase == "startup" else ("unavailable" in models["dictation_ft"]["error"])
+
+
+@pytest.mark.parametrize("sr,channels", [(8000, 1), (16000, 2)])
+def test_wrong_audio_format_is_a_failed_row(tmp_path, pipeline, sr, channels):
+    audio(tmp_path, sr=sr, channels=channels)
+    (row,), _ = ep.evaluate([case()], tmp_path, pipeline)
+    assert not row["passed"] and "16 kHz mono" in row["error"]
+
+
+@pytest.mark.parametrize("only,mode", [("missing", None), (None, "command")])
+def test_empty_or_unknown_selection_is_rejected(tmp_path, only, mode):
+    manifest(tmp_path)
+    with pytest.raises(ValueError):
+        ep.load_suite(tmp_path, only, mode)
