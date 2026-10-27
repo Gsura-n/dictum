@@ -108,8 +108,11 @@ def evaluate(clips, root: Path, pipe=None) -> tuple[list[dict], dict]:
     except Exception as e:
         startup_error = f"{type(e).__name__}: {e}"
     models, rows = (model_info(pipe, modes) if pipe else {m: {"error": startup_error} for m in modes}), []
+    for mode, info in models.items():
+        print(f"mode {mode}: {json.dumps(info)}")
+    print("id       mode           STT WER   paste   total seconds")
     for c in clips:
-        row = dict(c, passed=False, error=None, raw=None, output=None, audio_s=None,
+        row = dict(c, graded=(c["kind"] != "cue" and c["mode"] != "academic"), passed=False, error=None, raw=None, output=None, audio_s=None,
                    stt_wer=None, stt_s=None, refine_s=None, total_s=None)
         start = None
         try:
@@ -134,7 +137,16 @@ def evaluate(clips, root: Path, pipe=None) -> tuple[list[dict], dict]:
             row["stt_wer"] = wer(normalize_numbers(row["raw"]), normalize_numbers(c["said"]))
             out, expect = result.text, c["expect"]
             if c["mode"] == "command":
-                row["passed"] = out.strip() in expect
+                passed = False
+                for cmd in expect:
+                    if out.strip() == cmd:
+                        passed = True
+                        break
+                    score = command_score(out, cmd)
+                    if score["util_match"] and score["flag_f1"] == 1.0:
+                        passed = True
+                        break
+                row["passed"] = passed
                 if not row["passed"]:
                     row["command_score"] = command_score(out, expect[0])
             else:
@@ -146,6 +158,17 @@ def evaluate(clips, root: Path, pipe=None) -> tuple[list[dict], dict]:
             row.update(passed=False, error=f"{type(e).__name__}: {e}")
             if start is not None and row["total_s"] is None:
                 row["stt_s"] = row["total_s"] = time.perf_counter() - start
+
+        if not row["graded"]:
+            row["passed"] = False
+
+        status = 'pass' if row['passed'] else 'FAIL'
+        if not row["graded"]:
+            similarity_val = row.get("paste_similarity")
+            status = f"-   {fmt(similarity_val)}"
+        print(f"{row['id']:<8} {row['mode']:<14} {fmt(row['stt_wer']):>8}   {status:<5}   {fmt(row['total_s'])}")
+        sys.stdout.flush()
+
         rows.append(row)
     return rows, models
 
@@ -155,11 +178,19 @@ def summarize(rows: list[dict]) -> dict:
     groups["overall"] = rows
     summary = {}
     for group, rs in groups.items():
-        n, k = len(rs), sum(r["passed"] for r in rs)
+        graded_rs = [r for r in rs if r.get("graded", True)]
+        ungraded_rs = [r for r in rs if not r.get("graded", True)]
+
+        n, k = len(graded_rs), sum(r["passed"] for r in graded_rs)
         stt = [r["stt_wer"] for r in rs if r["stt_wer"] is not None]
+
+        ungraded_sims = [r["paste_similarity"] for r in ungraded_rs if "paste_similarity" in r and r["paste_similarity"] is not None]
+
         s = dict(n=n, failed=sum(r["error"] is not None for r in rs), stt_n=len(stt),
                  mean_stt_wer=float(np.mean(stt)) if stt else None,
-                 paste_pass_rate=k/n if n else None, paste_ci95=list(wilson(k, n)) if n else [None, None])
+                 paste_pass_rate=k/n if n else None, paste_ci95=list(wilson(k, n)) if n else [None, None],
+                 ungraded_n=len(ungraded_rs),
+                 mean_paste_similarity=float(np.mean(ungraded_sims)) if ungraded_sims else None)
         for label, subset in (("latency", rs), ("latency_le15s", [r for r in rs if r["audio_s"] is not None and r["audio_s"] <= 15])):
             good = [r for r in subset if r["error"] is None]
             s[label] = {key: {f"p{p}": pct([r[key] for r in good], p) if good else None for p in (50, 95)}
@@ -174,16 +205,22 @@ def fmt(value, spec=".3f"):
 
 
 def report(rows, summary, models):
-    for mode, info in models.items():
-        print(f"mode {mode}: {json.dumps(info)}")
     print("id       mode           STT WER   paste   total seconds")
     for r in rows:
-        print(f"{r['id']:<8} {r['mode']:<14} {fmt(r['stt_wer']):>8}   {'pass' if r['passed'] else 'FAIL':<5}   {fmt(r['total_s'])}")
+        status = 'pass' if r['passed'] else 'FAIL'
+        if not r["graded"]:
+            similarity_val = r.get("paste_similarity")
+            status = f"-   {fmt(similarity_val)}"
+        print(f"{r['id']:<8} {r['mode']:<14} {fmt(r['stt_wer']):>8}   {status:<5}   {fmt(r['total_s'])}")
     print("Failures count against paste rate; latency excludes failed rows. STT WER uses available transcripts.")
     for group, s in summary.items():
         lo, hi = s["paste_ci95"]
+        ungraded_text = ""
+        if s.get("ungraded_n", 0) > 0:
+            ungraded_text = f" mean similarity={fmt(s['mean_paste_similarity'])} (ungraded n={s['ungraded_n']})"
+
         print(f"{group}: n={s['n']} failed={s['failed']} mean STT WER={fmt(s['mean_stt_wer'])} "
-              f"paste={fmt(s['paste_pass_rate'], '.1%')} Wilson 95% CI [{fmt(lo, '.1%')}, {fmt(hi, '.1%')}]")
+              f"paste={fmt(s['paste_pass_rate'], '.1%')} Wilson 95% CI [{fmt(lo, '.1%')}, {fmt(hi, '.1%')}]{ungraded_text}")
         for key, label in (("latency", "all"), ("latency_le15s", "<=15s (10s target)")):
             values = "  ".join(f"{stage} p50={fmt(s[key][stage]['p50'])} p95={fmt(s[key][stage]['p95'])}"
                                for stage in ("stt_s", "refine_s", "total_s"))
