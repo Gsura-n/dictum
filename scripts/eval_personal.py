@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import sys
 import time
 from datetime import datetime
@@ -137,13 +138,25 @@ def evaluate(clips, root: Path, pipe=None) -> tuple[list[dict], dict]:
             row["stt_wer"] = wer(normalize_numbers(row["raw"]), normalize_numbers(c["said"]))
             out, expect = result.text, c["expect"]
             if c["mode"] == "command":
+                def expand(text):
+                    try:
+                        tokens = shlex.split(text)
+                    except ValueError:
+                        return []
+                    expanded = []
+                    for t in tokens:
+                        if t.startswith("-") and not t.startswith("--") and len(t) > 2:
+                            expanded.extend(f"-{c}" for c in t[1:])
+                        else:
+                            expanded.append(t)
+                    return expanded
+
                 passed = False
                 for cmd in expect:
                     if out.strip() == cmd:
                         passed = True
                         break
-                    score = command_score(out, cmd)
-                    if score["util_match"] and score["flag_f1"] == 1.0:
+                    if sorted(expand(out)) == sorted(expand(cmd)):
                         passed = True
                         break
                 row["passed"] = passed
