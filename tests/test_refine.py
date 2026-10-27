@@ -9,6 +9,20 @@ def test_clean_output_strips_think_fences_quotes():
     assert clean_output("plain") == "plain"
 
 
+def test_strip_preamble():
+    from dictum.refine.common import strip_preamble
+    # Academic example
+    assert strip_preamble("Here is the rewritten text in formal academic prose:\n\nThe real text.", "the real text") == "The real text."
+    # Sure! Here's...
+    assert strip_preamble("Sure! Here's the cleaned text:\n\nSend it Thursday.", "send it thursday") == "Send it Thursday."
+    # A real sentence ending in a colon that is the whole output is kept
+    assert strip_preamble("A real sentence:", "a real sentence") == "A real sentence:"
+    # One line, text after the colon is kept
+    assert strip_preamble("Here is the plan: ship Friday.", "here is the plan ship friday") == "Here is the plan: ship Friday."
+    # Keep when the words appear in the source piece
+    assert strip_preamble("Okay team, here are the three things I need:\n\n1. Do X", "okay team here are the three things I need 1 do x") == "Okay team, here are the three things I need:\n\n1. Do X"
+
+
 def test_build_messages_includes_examples_and_dictionary():
     mode = Mode(name="t", prompt="Do X.", examples=[{"in": "a", "out": "b"}])
     msgs = build_messages(mode, "hello", ["Gauttam"])
