@@ -240,6 +240,22 @@ def test_max_input_words_fallback(raw, expected_mode, entrypoint, contract_confi
         assert refined.notes == []
 
 
+def test_max_input_words_fallback_extremely_long_input(contract_config):
+    raw = "word " * 100000 + "word"
+    outputs = {"command": "echo files", "dictation_ft": "Please list these files now."}
+    refiner = FakeRefiner(out=outputs)
+    pipe, inj = make(raw, refiner, contract_config)
+    transcript = Transcript(text=raw, engine="fake", latency_s=0.0, audio_s=CLIP.duration_s)
+
+    refined = pipe.refine_text(transcript, "command")
+
+    assert refiner.calls == [(transcript, contract_config.mode("dictation_ft"))]
+    assert refined.text == outputs["dictation_ft"]
+    assert refined.mode == "dictation_ft"
+    assert refined.source == transcript
+    assert any("too long" in note and "dictation_ft" in note for note in refined.notes)
+
+
 @pytest.mark.parametrize("entrypoint", ["process", "refine_text"])
 def test_command_prose_falls_back_to_dictation(entrypoint, contract_config):
     raw = "list these files"
