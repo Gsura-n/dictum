@@ -57,26 +57,42 @@ def audio(root, cid="P1", seconds=1, sr=16000, channels=1):
     sf.write(path, np.full((int(seconds * sr), channels), 0.1), sr)
 
 
-@pytest.mark.parametrize("mode,out,expect,passed", [
-    ("dictation_ft", "250 samples", "250 samples", True),
-    ("dictation_ft", "entirely different words", "250 samples", False),
-    ("academic", "250 samples", "250\nsamples", False),
-    ("academic", "250\nsamples", "250\nsamples", True),
-    ("academic", "250\nsamples\n", "250\nsamples", False),
-    ("command", " ls -la \n", ["ls -al", "ls -la"], True),
-    ("command", "pwd", ["ls -al", "ls -la"], False),
+@pytest.mark.parametrize("mode,kind,out,expect,passed", [
+    ("dictation_ft", "read", "250 samples", "250 samples", True),
+    ("dictation_ft", "read", "entirely different words", "250 samples", False),
+    ("academic", "read", "250 samples", "250\nsamples", False),
+    ("academic", "read", "250\nsamples", "250\nsamples", False),
+    ("academic", "read", "250\nsamples\n", "250\nsamples", False),
+    ("dictation_ft", "cue", "250 samples", "250 samples", False),
+    ("command", "read", " ls -la \n", ["ls -al", "ls -la"], True),
+    ("command", "read", "pwd", ["ls -al", "ls -la"], False),
+    ("command", "read", "git log -n 5 --oneline", ["git log --oneline -n 5"], True),
+    ("command", "read", "ls -la", ["pwd", "ls -a -l"], True),
+    ("command", "read", "git checkout -b 'Lookup Decoding'", ["git checkout -b lookup-decoding"], False),
+    ("command", "read", "rm -rf /tmp/x", ["rm -rf /"], False),
+    ("command", "read", "cp a b", ["cp b a"], False),
+    ("command", "read", "cat log.txt | grep error", ["grep error | cat log.txt"], False),
 ])
-def test_scores_real_pipeline_output(tmp_path, pipeline, mode, out, expect, passed):
+def test_scores_real_pipeline_output(tmp_path, pipeline, mode, kind, out, expect, passed):
     audio(tmp_path)
     pipeline.refiner.output = out
-    (row,), models = ep.evaluate([case(mode=mode, expect=expect)], tmp_path, pipeline)
+    c = case(mode=mode, expect=expect)
+    c["kind"] = kind
+    (row,), models = ep.evaluate([c], tmp_path, pipeline)
     assert ep.normalize_numbers is normalize_numbers and row["stt_wer"] == 0
-    assert row["passed"] is passed and row["error"] is None and row["raw"] == "250 samples"
+
+    graded = kind != "cue" and mode != "academic"
+    assert row.get("graded") is graded
+    if not graded:
+        assert row["passed"] is False
+    else:
+        assert row["passed"] is passed
+    assert row["error"] is None and row["raw"] == "250 samples"
     assert (row["stt_s"], row["refine_s"], row["total_s"]) == (0.25, 0.5, 1)
     assert models[mode]["adapter"] == "fake-adapter" and models[mode]["model"] == "fake-model"
     if mode != "command":
         assert row["paste_similarity"] >= 0 and row["paste_wer"] == (1.5 if out.startswith("entirely") else 0)
-    elif not passed:
+    elif not row["passed"]:
         assert row["command_score"] == command_score(out, expect[0])
 
 
@@ -120,22 +136,48 @@ def test_invalid_inputs_rejected(tmp_path, clips, refs):
 
 def test_group_and_overall_math():
     rows = [dict(id=cid, passed=ok, error=error, stt_wer=w, audio_s=duration,
-                 stt_s=t, refine_s=2*t, total_s=3*t)
-            for cid, ok, error, w, duration, t in [("P1", True, None, .2, 15, 1),
-                ("P2", False, None, .4, 16, 3), ("C1", False, "failed", .6, 10, 100)]]
+                 stt_s=t, refine_s=2*t, total_s=3*t, graded=graded, paste_similarity=sim)
+            for cid, ok, error, w, duration, t, graded, sim in [
+                ("P1", True, None, .2, 15, 1, True, 1.0),
+                ("P2", False, None, .4, 16, 3, True, 0.5),
+                ("C1", False, "failed", .6, 10, 100, True, 0.0),
+                ("P3", False, None, .8, 10, 2, False, 0.9)]]
     summary = ep.summarize(rows)
     s = summary["overall"]
-    assert s["n"] == 3 and s["mean_stt_wer"] == pytest.approx(.4) and s["paste_pass_rate"] == 1/3
+    assert s["n"] == 3 and s["mean_stt_wer"] == pytest.approx(.5) and s["paste_pass_rate"] == 1/3
+    assert s["ungraded_n"] == 1 and s["mean_paste_similarity"] == pytest.approx(0.9)
     assert s["paste_ci95"] == pytest.approx(wilson(1, 3))
     assert s["latency"]["stt_s"] == {"p50": 2, "p95": pytest.approx(2.9)}
-    assert s["latency_le15s"]["total_s"] == {"p50": 3, "p95": 3}
+    assert s["latency_le15s"]["total_s"] == {"p50": 4.5, "p95": pytest.approx(5.85)}
     assert summary["P"]["paste_pass_rate"] == .5 and summary["C"]["failed"] == 1
-    assert summary["Q"]["n"] == 0 and summary["Q"]["mean_stt_wer"] is None
+    assert summary["P"]["ungraded_n"] == 1 and summary["P"]["mean_paste_similarity"] == pytest.approx(0.9)
+    assert summary["C"]["ungraded_n"] == 0 and summary["C"]["mean_paste_similarity"] is None
+    assert summary["Q"]["n"] == 0 and summary["Q"]["mean_stt_wer"] is None and summary["Q"]["ungraded_n"] == 0
     for n in range(len(rows) + 1):
         s = ep.summarize(rows[:n])
-        assert s["overall"]["n"] == sum(s[g]["n"] for g in ep.GROUPS) == n
-        assert s["overall"]["paste_pass_rate"] == (sum(r["passed"] for r in rows[:n])/n if n else None)
+        assert s["overall"]["n"] == sum(s[g]["n"] for g in ep.GROUPS) == sum(r["graded"] for r in rows[:n])
+        graded_rows = [r for r in rows[:n] if r["graded"]]
+        assert s["overall"]["paste_pass_rate"] == (sum(r["passed"] for r in graded_rows) / len(graded_rows) if graded_rows else None)
 
+
+def test_progress_output(tmp_path, pipeline, capsys):
+    audio(tmp_path, "P1")
+    audio(tmp_path, "A1")
+    pipeline.refiner.output = "250 samples"
+    clips = [case(cid="P1", mode="dictation_ft", expect="250 samples"),
+             case(cid="A1", mode="academic", expect="250 samples")]
+    clips[1]["kind"] = "read"
+    ep.evaluate(clips, tmp_path, pipeline)
+    out = capsys.readouterr().out
+    assert "mode dictation_ft:" in out
+    assert "mode academic:" in out
+    assert "id       mode           STT WER   paste   total seconds" in out
+    assert "P1       dictation_ft" in out
+    assert "pass" in out
+    assert "A1       academic" in out
+    assert " -   " in out
+    assert out.index("P1") > out.index("id       mode")
+    assert out.index("A1") > out.index("P1")
 
 def test_main_filters_saves_and_prints_models_and_latency(tmp_path, pipeline, monkeypatch, capsys):
     clips = [case(), case("A1", "academic")]
