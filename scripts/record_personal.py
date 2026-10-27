@@ -160,8 +160,11 @@ def main() -> None:
     ap.add_argument("--device", type=int, help="input device index (default: the config's)")
     a = ap.parse_args()
     root = a.dir.expanduser()
-    ensure_outside_repo(root)
-    clips = load_clips(root / "clips.yaml")
+    try:
+        ensure_outside_repo(root)
+        clips = load_clips(root / "clips.yaml")
+    except (ValueError, OSError) as e:
+        sys.exit(f"error: {e}")
 
     # Same wiring as Pipeline.from_config, without the refiner and injector.
     from dictum.capture import SoundDeviceCapture
