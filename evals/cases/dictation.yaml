@@ -154,3 +154,121 @@
   exclude: ["um", "uh", "you know"]
   min_len_ratio: 0.8
   max_len_ratio: 1.15
+
+# Self-corrections as Parakeet writes them: a period or comma before the cue, a filler in front of it.
+# The fine-tuned model learned retractions from unpunctuated single sentences, so these are the shape it misses.
+- id: cue-um-no-wait-swap
+  tags: [correction-cue, parakeet-punctuation]
+  difficulty: hard
+  input: "Let's meet on Tuesday. Um no wait uh Thursday at three."
+  reference: "Let's meet on Thursday at 3."
+  regex: ['Thursday at (three|3)']
+  exclude: ["Tuesday", "no wait", "wait", "um", "uh"]
+
+- id: cue-oh-actually-no-redo
+  tags: [correction-cue, parakeet-punctuation]
+  difficulty: hard
+  input: "Send it to the team lead. Oh actually no, send it to the whole team."
+  reference: "Send it to the whole team."
+  include: ["whole team"]
+  exclude: ["team lead", "actually", "no"]
+
+- id: cue-sorry-i-mean
+  tags: [correction-cue, parakeet-punctuation]
+  difficulty: hard
+  input: "I'll have the report ready by Monday. Sorry, I mean Wednesday."
+  reference: "I'll have the report ready by Wednesday."
+  include: ["report ready by Wednesday"]
+  exclude: ["Monday", "sorry", "I mean"]
+
+- id: cue-or-rather-new-sentence
+  tags: [correction-cue, parakeet-punctuation]
+  difficulty: hard
+  input: "We should use Postgres. Or rather, we should use SQLite for this."
+  reference: "We should use SQLite for this."
+  include: ["SQLite for this"]
+  exclude: ["Postgres", "or rather"]
+
+- id: cue-or-rather-after-comma
+  tags: [correction-cue, parakeet-punctuation]
+  difficulty: hard
+  input: "I'll send the invoice tomorrow, or rather, on Thursday after the review."
+  reference: "I'll send the invoice on Thursday after the review."
+  include: ["Thursday after the review"]
+  exclude: ["tomorrow", "or rather"]
+
+- id: cue-no-wait-after-period
+  tags: [correction-cue, parakeet-punctuation]
+  difficulty: medium
+  input: "The budget is five thousand dollars. No wait, fifteen thousand dollars."
+  reference: "The budget is fifteen thousand dollars."
+  include: ["fifteen thousand"]
+  exclude: ["five thousand dollars", "no wait"]
+
+- id: cue-scratch-that-after-period
+  tags: [correction-cue, parakeet-punctuation]
+  difficulty: medium
+  input: "Please call Dave. Scratch that, call Mike."
+  reference: "Call Mike."
+  include: ["Mike"]
+  exclude: ["Dave", "scratch"]
+
+# Not covered by the pre-pass on purpose (no cue word, or a bare "no"); kept so the gap stays visible.
+- id: cue-i-mean-false-start
+  tags: [correction-cue, known-gap]
+  difficulty: hard
+  input: "I think we should, I mean um I'm pretty sure uh we should merge it today."
+  reference: "I'm pretty sure we should merge it today."
+  include: ["pretty sure we should merge it today"]
+  exclude: ["I think", "I mean", "um", "uh"]
+
+- id: cue-bare-no-correction
+  tags: [correction-cue, known-gap]
+  difficulty: hard
+  input: "Her name is Sara. No, not Sara, Sarah with an H."
+  reference: "Her name is Sarah with an H."
+  include: ["Sarah with an H"]
+  exclude: ["No", "not Sara"]
+
+# Look like a correction cue but are not; the output must be the input, unchanged.
+- id: cue-fp-no-wait-noun
+  tags: [false-correction, correction-cue]
+  difficulty: medium
+  input: "There was no wait at the counter."
+  reference: "There was no wait at the counter."
+  include_exact: ["There was no wait at the counter."]
+
+- id: cue-fp-make-that-meeting
+  tags: [false-correction, correction-cue]
+  difficulty: medium
+  input: "I can't make that meeting."
+  reference: "I can't make that meeting."
+  include_exact: ["I can't make that meeting."]
+
+- id: cue-fp-no-agree
+  tags: [false-correction, correction-cue]
+  difficulty: medium
+  input: "That's right. No, I agree."
+  reference: "That's right. No, I agree."
+  include_exact: ["That's right. No, I agree."]
+
+- id: cue-fp-no-dont-think
+  tags: [false-correction, correction-cue]
+  difficulty: medium
+  input: "No, I don't think so."
+  reference: "No, I don't think so."
+  include_exact: ["No, I don't think so."]
+
+- id: cue-fp-sorry-late
+  tags: [false-correction, correction-cue]
+  difficulty: medium
+  input: "Sorry, I'm late."
+  reference: "Sorry, I'm late."
+  include_exact: ["Sorry, I'm late."]
+
+- id: cue-fp-i-mean-it
+  tags: [false-correction, correction-cue]
+  difficulty: medium
+  input: "I mean it."
+  reference: "I mean it."
+  include_exact: ["I mean it."]
