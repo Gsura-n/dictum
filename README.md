@@ -169,6 +169,8 @@ Personalization continues training from the current adapter on your corrections 
 
 `config/default.yaml` holds everything: audio device, engine and model names, refinement backend, injection backend, modes and your personal dictionary. Copy it to `config/local.yaml` for overrides; that file is git-ignored.
 
+To add new words to the dictionary in `config/local.yaml` without overwriting the default ones, use the `dictionary_add:` list.
+
 ## Architecture
 
 Four stages, each behind a small interface, wired together in one place:
