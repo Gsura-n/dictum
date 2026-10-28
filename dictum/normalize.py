@@ -266,9 +266,29 @@ def split_breaks(text: str) -> list[tuple[str, str]]:
     return out or [("", "")]
 
 
+# Parakeet punctuates a spoken retraction as if it began a new sentence: "Tuesday. Um no wait uh Thursday."
+# The fine-tuned model learned retractions from unpunctuated text and keeps the cue behind a . or , so this joins
+# the cue to what it retracts. Only the filler and the boundary mark in front go; the model still decides what is
+# retracted, so a false match costs a missing period, not lost words. Four cues, nothing else: not a bare "no",
+# not "make that", and not "scratch that" (scratch_that owns it). A "?" or "!" in front is left alone.
+_FILLER_LEAD = r"(?:(?:um|uh|oh|well)[.,;]?\s+)*"      # Parakeet sometimes gives a filler its own sentence: "Um."
+_CUE = re.compile(
+    rf"(?<=\w)[.,;]\s+{_FILLER_LEAD}"
+    r"(?P<cue>no,? wait(?!\s+(?:times?|lists?)\b)"                   # "no wait times"
+    r"|actually,? no(?!\s+(?:longer|more|one|way|matter)\b)"         # "actually no longer"
+    r"|or rather(?!\s+than\b)"
+    r"|sorry,? i mean(?!\s+it\b))\b",                               # "sorry, I mean it" is an apology
+    re.IGNORECASE)
+
+
+def correction_cues(text: str) -> str:
+    """"Tuesday. Um no wait uh Thursday." -> "Tuesday no wait uh Thursday." (later fillers are the model's)."""
+    return _CUE.sub(lambda m: " " + m.group("cue")[0].lower() + m.group("cue")[1:], text)
+
+
 def apply(text: str, cfg: dict | None = None) -> list[tuple[str, str]]:
     cfg = {"spoken_punctuation": True, "spoken_addresses": True, "repeated_words": True,
-           "scratch_that": True, "restarts": True, "phrase_repeats": True, **(cfg or {})}
+           "scratch_that": True, "restarts": True, "phrase_repeats": True, "correction_cues": True, **(cfg or {})}
     if cfg["spoken_addresses"]:
         text = spoken_addresses(text)
     if cfg["repeated_words"]:
@@ -280,6 +300,8 @@ def apply(text: str, cfg: dict | None = None) -> list[tuple[str, str]]:
     segments = split_breaks(text) if cfg["spoken_punctuation"] else [(text, "")]
     if cfg["spoken_punctuation"]:
         segments = [(spoken_punctuation(s), b) for s, b in segments]
+    if cfg["correction_cues"]:
+        segments = [(correction_cues(s), b) for s, b in segments]
     if cfg["scratch_that"]:
         segments = [(scratch_that(s), b) for s, b in segments]
         segments = [(s, b) for s, b in segments if s.strip()] or [("", "")]
@@ -291,8 +313,8 @@ def join(segments: list[tuple[str, str]]) -> str:
 
 
 _SENT = re.compile(r"(?<=[.?!])\s+")
-_CORRECTION_START = re.compile(r"^(no|not|nope|actually|sorry|wait|i mean|i meant|or rather|rather|make that|"
-                               r"scratch that|strike that|oops|instead)\b", re.IGNORECASE)
+_CORRECTION_START = re.compile(rf"^{_FILLER_LEAD}(no|not|nope|actually|sorry|wait|i mean|i meant|or rather|rather|"
+                               r"make that|scratch that|strike that|oops|instead)\b", re.IGNORECASE)
 
 
 _CLAUSE_START = re.compile(

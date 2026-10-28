@@ -24,6 +24,8 @@ from dictum import normalize as n
      "The budget is five thousand dollars no wait, fifteen thousand dollars."),
     ("Let's meet on Tuesday, well, no wait, Thursday.", "Let's meet on Tuesday no wait, Thursday."),
     ("Meet at nine; actually no, ten.", "Meet at nine actually no, ten."),
+    ("Let's meet on Tuesday. Um. No wait, Thursday.", "Let's meet on Tuesday no wait, Thursday."),
+    ("Meet at nine. Oh. Well; actually no, ten.", "Meet at nine actually no, ten."),
     ("Meet at nine. Uh, um, actually, no, ten.", "Meet at nine actually, no, ten."),
 ])
 def test_cue_after_boundary_is_joined_to_what_it_retracts(raw, want):
@@ -98,3 +100,30 @@ def test_chunk_does_not_glue_a_filler_sentence_that_is_not_a_correction():
     parts = n.chunk(text, 60)
     assert len(parts) >= 2
     assert not any(antecedent in p and "Um so I will" in p for p in parts)
+
+
+def test_pre_pass_properties_on_random_text():
+    """Seeded, stdlib only (no property-testing dependency): idempotent, leaves cue-free text alone, and only ever
+    removes filler words and boundary marks."""
+    import random
+    import re
+    rng = random.Random(20261028)
+    vocab = ["send", "it", "to", "the", "team", "lead", "Tuesday", "three", "no", "wait", "actually", "or", "rather",
+             "sorry", "I", "mean", "um", "uh", "oh", "well", "scratch", "that", "make", "longer", "times", "than",
+             "no wait", "actually no", "or rather", "sorry I mean", "um no wait", "oh actually no"]
+    cue_words = {"wait", "actually", "rather", "sorry"}
+    marks = [" ", " ", " ", ". ", ", ", "; ", "? ", "! "]
+    words = lambda t: re.findall(r"[a-z']+", t.lower())  # noqa: E731
+    rewritten = 0
+    for _ in range(400):
+        text = "".join(rng.choice(vocab) + rng.choice(marks) for _ in range(rng.randint(1, 18))).strip()
+        out = n.correction_cues(text)
+        rewritten += out != text
+        assert n.correction_cues(out) == out
+        if not cue_words & set(words(text)):
+            assert out == text
+        removed = list(words(text))
+        for w in words(out):
+            removed.remove(w)
+        assert set(removed) <= {"um", "uh", "oh", "well"}, (text, out)
+    assert rewritten > 100, rewritten      # the generator must actually reach the rule
